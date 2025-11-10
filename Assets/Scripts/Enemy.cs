@@ -10,15 +10,26 @@ public class Enemy : MonoBehaviour
     [Header("Preset Fields")] 
     [SerializeField] private Animator animator;
     [SerializeField] private GameObject splashFx;
+    [SerializeField] private Transform player; // 플레이어 위치
     
     [Header("Settings")]
-    [SerializeField] private float attackRange;
+    [SerializeField] private float attackRange = 2f; // 공격 범위
+    [SerializeField] private float chaseRange = 10f; // 추적 범위
+    [SerializeField] private float patrolRange = 5f; // 순찰 범위
+    [SerializeField] private int maxHealth = 100; // 최대 체력 100
+    
+    private NavMeshAgent navMeshAgent;
+    private Vector3 patrolTarget;
+    private int currentHealth;
+    private bool isDead = false;
     
     public enum State 
     {
         None,
         Idle,
-        Attack
+        Chase,
+        Attack,
+        Dead
     }
     
     [Header("Debug")]
@@ -29,32 +40,61 @@ public class Enemy : MonoBehaviour
 
     private void Start()
     { 
+        navMeshAgent = GetComponent<NavMeshAgent>();
+        if (player == null)
+            player = GameObject.FindGameObjectWithTag("Player")?.transform;
+        
+        currentHealth = maxHealth;
         state = State.None;
         nextState = State.Idle;
+        SetNewPatrolTarget();
     }
 
     private void Update()
     {
+        // 죽었으면 아무것도 하지 않기
+        if (isDead)
+            return;
+
         //1. 스테이트 전환 상황 판단
         if (nextState == State.None) 
         {
             switch (state) 
             {
                 case State.Idle:
-                    //1 << 6인 이유는 Player의 Layer가 6이기 때문
-                    if (Physics.CheckSphere(transform.position, attackRange, 1 << 6, QueryTriggerInteraction.Ignore))
+                    // 플레이어가 추적 범위 안에 있으면 Chase로 전환
+                    if (player != null && Vector3.Distance(transform.position, player.position) < chaseRange)
+                    {
+                        nextState = State.Chase;
+                    }
+                    // 패트롤 목표에 도달하면 새로운 목표 설정
+                    else if (navMeshAgent.remainingDistance < 0.5f)
+                    {
+                        SetNewPatrolTarget();
+                    }
+                    break;
+                    
+                case State.Chase:
+                    // 플레이어가 추적 범위를 벗어나면 Idle로
+                    if (player == null || Vector3.Distance(transform.position, player.position) > chaseRange + 2f)
+                    {
+                        nextState = State.Idle;
+                        SetNewPatrolTarget();
+                    }
+                    // 공격 범위 안에 있으면 Attack
+                    else if (Vector3.Distance(transform.position, player.position) < attackRange)
                     {
                         nextState = State.Attack;
                     }
                     break;
+                    
                 case State.Attack:
                     if (attackDone)
                     {
-                        nextState = State.Idle;
+                        nextState = State.Chase; // 공격 후 다시 추적
                         attackDone = false;
                     }
                     break;
-                //insert code here...
             }
         }
         
@@ -66,39 +106,100 @@ public class Enemy : MonoBehaviour
             switch (state) 
             {
                 case State.Idle:
+                    animator.SetBool("isMoving", false);
+                    break;
+                case State.Chase:
+                    animator.SetBool("isMoving", true);
                     break;
                 case State.Attack:
+                    animator.SetBool("isMoving", false);
                     Attack();
                     break;
-                //insert code here...
+                case State.Dead:
+                    animator.SetBool("isMoving", false);
+                    animator.SetTrigger("death"); // death 트리거 발동!
+                    navMeshAgent.enabled = false;
+                    isDead = true;
+                    break;
             }
         }
         
         //3. 글로벌 & 스테이트 업데이트
-        //insert code here...
+        if (state == State.Idle)
+        {
+            navMeshAgent.SetDestination(patrolTarget);
+        }
+        else if (state == State.Chase && player != null)
+        {
+            navMeshAgent.SetDestination(player.position);
+        }
     }
     
-    private void Attack() //현재 공격은 애니메이션만 작동합니다.
+    private void SetNewPatrolTarget()
+    {
+        // 랜덤한 위치에서 패트롤 목표 설정
+        Vector3 randomDirection = Random.insideUnitSphere * patrolRange;
+        randomDirection += transform.position;
+        
+        if (NavMesh.SamplePosition(randomDirection, out NavMeshHit hit, patrolRange, NavMesh.AllAreas))
+        {
+            patrolTarget = hit.position;
+        }
+    }
+    
+    private void Attack()
     {
         animator.SetTrigger("attack");
     }
 
-    public void InstantiateFx() //Unity Animation Event 에서 실행됩니다.
+    public void InstantiateFx()
     {
         Instantiate(splashFx, transform.position, Quaternion.identity);
     }
     
-    public void WhenAnimationDone() //Unity Animation Event 에서 실행됩니다.
+    public void WhenAnimationDone()
     {
         attackDone = true;
     }
 
+    // 데미지 받는 함수
+    public void TakeDamage(int damage)
+    {
+        if (isDead) return;
+
+        currentHealth -= damage;
+        Debug.Log($"Enemy took {damage} damage. Health: {currentHealth}/{maxHealth}");
+
+        // 데미지 받을 때 stun 애니메이션
+        animator.SetTrigger("stun");
+
+        if (currentHealth <= 0)
+        {
+            Die();
+        }
+    }
+
+    // 죽는 함수
+    private void Die()
+    {
+        if (isDead) return;
+
+        isDead = true;
+        
+        Debug.Log("Enemy died!");
+        
+        // 즉시 사라지기
+        Destroy(gameObject);
+    }
 
     private void OnDrawGizmosSelected()
     {
-        //Gizmos를 사용하여 공격 범위를 Scene View에서 확인할 수 있게 합니다. (인게임에서는 볼 수 없습니다.)
-        //해당 함수는 없어도 기능 상의 문제는 없지만, 기능 체크 및 디버깅을 용이하게 합니다.
+        // 공격 범위
         Gizmos.color = new Color(1f, 0f, 0f, 0.5f);
         Gizmos.DrawSphere(transform.position, attackRange);
+        
+        // 추적 범위
+        Gizmos.color = new Color(1f, 1f, 0f, 0.3f);
+        Gizmos.DrawSphere(transform.position, chaseRange);
     }
 }

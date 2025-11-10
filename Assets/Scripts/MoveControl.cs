@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public class MoveControl : MonoBehaviour
 {
@@ -29,7 +28,8 @@ public class MoveControl : MonoBehaviour
     public bool moving = false;
     
     private float stateTime;
-    private Vector3 forward, right;
+    private int jumpCount = 0; // 점프 횟수 카운트
+    private int maxJumps = 2; // 최대 2번 점프
 
     private void Start()
     {
@@ -39,8 +39,6 @@ public class MoveControl : MonoBehaviour
         state = State.None;
         nextState = State.Idle;
         stateTime = 0f;
-        forward = transform.forward;
-        right = transform.right;
     }
 
     private void Update()
@@ -48,7 +46,6 @@ public class MoveControl : MonoBehaviour
         //0. 글로벌 상황 판단
         stateTime += Time.deltaTime;
         CheckLanded();
-        //insert code here...
 
         //1. 스테이트 전환 상황 판단
         if (nextState == State.None) 
@@ -58,8 +55,9 @@ public class MoveControl : MonoBehaviour
                 case State.Idle:
                     if (landed) 
                     {
-                        if (Input.GetKey(KeyCode.Space)) 
+                        if (Input.GetKey(KeyCode.Space))
                         {
+                            jumpCount = 1;
                             nextState = State.Jump;
                         }
                     }
@@ -67,10 +65,18 @@ public class MoveControl : MonoBehaviour
                 case State.Jump:
                     if (landed) 
                     {
+                        jumpCount = 0; // 착지하면 점프 카운트 리셋
                         nextState = State.Idle;
                     }
+                    // 공중에서 Space 누르면 이단 점프
+                    else if (Input.GetKeyDown(KeyCode.Space) && jumpCount < maxJumps)
+                    {
+                        jumpCount++;
+                        var vel = rigid.linearVelocity;
+                        vel.y = jumpAmount;
+                        rigid.linearVelocity = vel;
+                    }
                     break;
-                //insert code here...
             }
         }
         
@@ -86,13 +92,9 @@ public class MoveControl : MonoBehaviour
                     vel.y = jumpAmount;
                     rigid.linearVelocity = vel;
                     break;
-                //insert code here...
             }
             stateTime = 0f;
         }
-        
-        //3. 글로벌 & 스테이트 업데이트
-        //insert code here...
     }
 
     private void FixedUpdate()
@@ -110,6 +112,26 @@ public class MoveControl : MonoBehaviour
     
     private void UpdateInput()
     {
+        // [문제]
+        // transform.Translate()는 Local 좌표계를 기준으로 움직이기 때문에
+        // Player가 회전하면 모든 각도에서 WASD가 일관되지 않음
+        // 예: 180도 회전 후 W를 누르면 뒤로 감
+        
+        // [원인]
+        // transform.forward/right가 Player 회전에 따라 변하는데,
+        // transform.Translate()가 이를 Local 좌표로 해석하면서 중복 적용됨
+        
+        // [해결]
+        // Rigidbody.velocity를 직접 설정하여 
+        // World 좌표계에서 절대적인 이동 방향을 적용
+        
+        Vector3 forward = transform.forward;
+        Vector3 right = transform.right;
+        forward.y = 0;
+        right.y = 0;
+        forward.Normalize();
+        right.Normalize();
+        
         var direction = Vector3.zero;
         
         if (Input.GetKey(KeyCode.W)) direction += forward; //Forward
@@ -117,8 +139,24 @@ public class MoveControl : MonoBehaviour
         if (Input.GetKey(KeyCode.S)) direction += -forward; //Back
         if (Input.GetKey(KeyCode.D)) direction += right; //Right
         
-        direction.Normalize(); //대각선 이동(Ex. W + A)시에도 동일한 이동속도를 위해 direction을 Normalize
+        direction.Normalize();
         
-        transform.Translate( moveSpeed * Time.deltaTime * direction); //Move
+        // 달리기 속도 조정
+        float currentSpeed = moveSpeed;
+        if (Input.GetKey(KeyCode.LeftShift) && Input.GetKey(KeyCode.W))
+        {
+            currentSpeed = moveSpeed * 2f; // Shift + W로 2배 속도
+        }
+        
+        // ===== 변경 전 =====
+        // transform.Translate(currentSpeed * Time.deltaTime * direction);
+        
+        // ===== 변경 후 =====
+        // Rigidbody.velocity를 직접 설정 (Y축은 중력 유지)
+        rigid.linearVelocity = new Vector3(
+            direction.x * currentSpeed,
+            rigid.linearVelocity.y,
+            direction.z * currentSpeed
+        );
     }
 }

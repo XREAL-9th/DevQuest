@@ -17,11 +17,13 @@ public class CameraControl : MonoBehaviour
         playerTransform = transform.parent;
     }
 
-    private void FixedUpdate()
+//Update(): 매 프레임마다 호출 (입력 처리에 적합)
+//FixedUpdate(): 물리 업데이트마다 호출 (카메라 회전에는 부적합)
+    private void Update()
     {
         mouseX += Input.GetAxis("Mouse X") * sensitivity;
         playerTransform.rotation = Quaternion.Euler(new Vector3(0, mouseX, 0));
-        
+
         mouseY += Input.GetAxis("Mouse Y") * sensitivity;
         mouseY = Mathf.Clamp(mouseY, -75f, 75f);
         transform.localRotation = Quaternion.Euler(new Vector3(-mouseY, 0, 0));
