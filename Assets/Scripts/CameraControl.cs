@@ -15,6 +15,8 @@ public class CameraControl : MonoBehaviour
 
     void LateUpdate()
     {
+        if (GameManager.Instance.isGameOver)
+            return;  // 게임오버면 총 발사 막기
         // 1. 입력값 읽기 (프레임당)
         float dx = Input.GetAxis("Mouse X") * sensitivity;
         float dy = Input.GetAxis("Mouse Y") * sensitivity;

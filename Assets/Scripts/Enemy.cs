@@ -7,17 +7,34 @@ using Random = UnityEngine.Random;
 
 public class Enemy : MonoBehaviour
 {
+    public enum State
+    {
+        None,
+        Idle,
+        Chase,
+        RangedAttack
+    }
+
     [Header("Preset Fields")]
     [SerializeField] private Animator animator;
     [SerializeField] private GameObject splashFx;
 
     [Header("Detect/Combat")]
-    [SerializeField] private float attackRange = 1.5f;  // 공격 발동 거리
-    [SerializeField] private float sightRange = 15f;    // 시야 범위(정면에서만 유효)
+    [SerializeField] private float attackRange = 1.5f;  // 근접 공격 발동 거리
+    [SerializeField] private float sightRange = 0f;    // 시야 범위(정면에서만 유효)
     [SerializeField] private float sightFOV = 90f;    // 정면 시야각(±45°)
     [SerializeField] private float chaseSpeed = 3.5f;
     [SerializeField] private float idleSpeed = 1.5f;
     [SerializeField] private float stopDistance = 1.2f;  // 플레이어 접근 시 멈춤 거리
+
+    [Header("Ranged Attack")]
+    [SerializeField] private float rangedRange = 20f; // 원거리 공격 발동 거리
+    [SerializeField] private float fireCoolTime = 1.6f; // 발사 쿨타임
+    [SerializeField] private float fireWindUp = 0.2f; // 쏘기 전 딜레이
+    [SerializeField] private float turnSpeed = 540f; // 초당 회전각
+    [SerializeField] private GameObject projectilePrefab; // rigidbody
+    [SerializeField] private Transform muzzle; // 발사 위치
+
 
     [Header("Wander (필수과제 2-1)")]
     [SerializeField] private float wanderRadius = 8f;
@@ -28,18 +45,12 @@ public class Enemy : MonoBehaviour
     [SerializeField] private Transform eyePoint;     // 눈 위치(자식 오브젝트 할당)
     [SerializeField] private float fallbackEyeHeight = 1.0f; // eyePoint 없을 때만 사용
 
-    public enum State
-    {
-        None,
-        Idle,
-        Attack
-    }
-
     [Header("Debug")]
     public State state = State.None;
     public State nextState = State.None;
 
     private bool attackDone;
+    private float fireTimer; // 원기리 공격 쿨타임
     private float wanderDelayTimer;
     private NavMeshAgent agent;
     private Transform player;   // 가장 가까운 플레이어(레이어 6)
@@ -67,21 +78,40 @@ public class Enemy : MonoBehaviour
 
     private void Update()
     {
-        //1. 스테이트 전환 상황 판단
+        // 전이 판단
         if (nextState == State.None)
         {
             switch (state)
             {
                 case State.Idle:
-                    if (PlayerInFront(out player)) nextState = State.Attack;
+                    if (PlayerInFront(out player))
+                    {
+                        float d = Vector3.Distance(transform.position, player.position);
+                        nextState = (d <= attackRange) ? State.Chase : (d <= rangedRange && HasLineOfSight()) ? State.RangedAttack : State.Chase;
+                    }
                     break;
-
-                case State.Attack:
+                case State.Chase:
                     if (!PlayerInFront(out player)) nextState = State.Idle;
-                    else if (attackDone) attackDone = false;
+                    else
+                    {
+                        float d = Vector3.Distance(transform.position, player.position);
+                        if (d <= attackRange)
+                        {
+                            if (attackDone) attackDone = false;
+                        }
+                        else if (d <= rangedRange && HasLineOfSight()) nextState = State.RangedAttack;
+                    }
+                    break;
+                case State.RangedAttack:
+                    if (!PlayerInFront(out player)) nextState = State.Idle;
+                    else
+                    {
+                        float d = Vector3.Distance(transform.position, player.position);
+                        if (d <= attackRange) nextState = State.Chase;    // 근접으로 전환
+                        else if (d > rangedRange || !HasLineOfSight()) nextState = State.Chase;
+                    }
                     break;
             }
-
         }
 
         //2. 스테이트 초기화
@@ -98,10 +128,15 @@ public class Enemy : MonoBehaviour
                     PickNextWander();
                     break;
 
-                case State.Attack:
+                case State.Chase:
                     agent.speed = chaseSpeed;
                     agent.isStopped = false;
                     agent.stoppingDistance = stopDistance; // ★ 추적/공격 때만 사용
+                    break;
+
+                case State.RangedAttack:
+                    agent.isStopped = true; // 멈추고 조준
+                    fireTimer = Mathf.Max(0f, fireTimer); // 유지
                     break;
             }
         }
@@ -111,8 +146,11 @@ public class Enemy : MonoBehaviour
                 UpdateIdle();     // 랜덤 배회 이동
                 break;
 
-            case State.Attack:
-                UpdateAttack();   // 플레이어 추적 + 공격
+            case State.Chase:
+                UpdateChase();   // 플레이어 추적 + 공격
+                break;
+            case State.RangedAttack:
+                UpdateRanged();
                 break;
         }
 
@@ -165,7 +203,7 @@ public class Enemy : MonoBehaviour
 
 
     // ================== Attack(추적/공격) ==================
-    private void UpdateAttack()
+    private void UpdateChase()
     {
         if (player == null) return;
 
@@ -178,11 +216,9 @@ public class Enemy : MonoBehaviour
         var to = (player.position - transform.position);
         to.y = 0f;
         if (to.sqrMagnitude > 0.001f)
-            transform.rotation = Quaternion.Slerp(transform.rotation,
-                                                  Quaternion.LookRotation(to),
-                                                  Time.deltaTime * 10f);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(to), turnSpeed * Time.deltaTime);
 
-        // 공격 범위면 멈추고 공격 트리거
+        // 근접 공격 범위면 멈추고 공격 트리거
         if (!agent.pathPending && agent.remainingDistance <= attackRange)
         {
             agent.isStopped = true;
@@ -190,6 +226,27 @@ public class Enemy : MonoBehaviour
         }
     }
 
+    private void UpdateRanged()
+    {
+        if (player == null) return;
+
+        // 플레이어 바라보기 (제자리 조준)
+        Vector3 dir = player.position - transform.position;
+        dir.y = 0f;
+
+        if (dir.sqrMagnitude > 0.0001f)
+        {
+            var look = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, look, turnSpeed * Time.deltaTime);
+        }
+
+        fireTimer -= Time.deltaTime;
+        if (fireTimer <= 0f && HasLineOfSight() && Vector3.Distance(transform.position, player.position) <= rangedRange)
+        {
+            StartCoroutine(FireOnce());
+            fireTimer = fireCoolTime;
+        }
+    }
     // ================== 감지/시야 체크 ==================
     private bool PlayerInFront(out Transform found)
     {
@@ -234,6 +291,51 @@ public class Enemy : MonoBehaviour
         found = bestT;
         return true;
     }
+    private bool HasLineOfSight()
+    {
+        if (player == null) return false;
+        Vector3 origin = eyePoint ? eyePoint.position : (transform.position + Vector3.up * fallbackEyeHeight);
+        Vector3 target = player.position + Vector3.up * 1.1f;
+        Vector3 dir = (target - origin);
+        float dist = dir.magnitude;
+        if (Physics.Raycast(origin, dir.normalized, out var hit, dist, ~0, QueryTriggerInteraction.Ignore))
+        {
+            return hit.collider.gameObject.layer == 6; // 플레이어 레이어
+        }
+        return true;
+    }
+
+    private IEnumerator FireOnce()
+    {
+        yield return new WaitForSeconds(fireWindUp);
+        if (!projectilePrefab || !muzzle) yield break;
+
+        // 총구 바로 앞에서 스폰 (자기 몸 밖으로 조금 빼주기)
+        Vector3 spawnPos = muzzle.position + muzzle.forward * 0.25f;
+        Quaternion spawnRot = muzzle.rotation;
+
+        GameObject go = Instantiate(projectilePrefab, spawnPos, spawnRot);
+
+        // 1) 스폰 직후 Enemy와의 충돌 무시
+        var myCols = GetComponentsInChildren<Collider>();
+        var projCols = go.GetComponentsInChildren<Collider>();
+        foreach (var pc in projCols)
+            foreach (var mc in myCols)
+                Physics.IgnoreCollision(pc, mc, true);
+
+        // 2) 속도 부여 (Unity 6 경고 대응)
+        if (go.TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb.linearVelocity = muzzle.forward * 12f;   // 보기 좋게 12~16으로 시작
+        }
+        else if (go.TryGetComponent(out Projectile p))
+        {
+            p.Launch(muzzle.forward * 12f);
+        }
+
+        animator?.SetTrigger("shoot");  // 애니메이터에 shoot 파라미터 없으면 제거
+    }
+
 
     private void Attack() //현재 공격은 애니메이션만 작동합니다.
     {
