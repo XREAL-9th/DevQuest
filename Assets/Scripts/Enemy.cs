@@ -5,28 +5,33 @@ using Random = UnityEngine.Random;
 
 public class Enemy : MonoBehaviour
 {
-    [Header("Preset Fields")] 
+    [Header("Preset Fields")]
     [SerializeField] private Animator animator;
     [SerializeField] private GameObject splashFx;
-    
+
     [Header("Settings")]
     [SerializeField] private float attackRange;
     [SerializeField] private NavMeshAgent navMeshAgent;
     [SerializeField][Range(1f, 20f)] private float detectionRange = 10f;
     [SerializeField][Range(1f, 40f)] private float detectionOutRange = 30f;
 
+    [Header("Health")]
+    [SerializeField][Range(1f, 100f)] private float maxHp = 100f;
+
+    private float currentHp;
     private Vector3 destination;
     private GameObject targetPlayer;
+    private Player player;
 
     public enum State
     {
         None,
         Idle,
-        Walk,
+        Wander,
         Target,
         Attack
     }
-    
+
     [Header("Debug")]
     public State state = State.None;
     public State nextState = State.None;
@@ -35,31 +40,33 @@ public class Enemy : MonoBehaviour
     private bool detectPlayer;
 
     private void Start()
-    { 
+    {
         state = State.None;
         nextState = State.Idle;
+
+        currentHp = maxHp;
     }
 
     private void Update()
     {
         //1. 스테이트 전환 상황 판단
-        if (nextState == State.None) 
+        if (nextState == State.None)
         {
-            switch (state) 
+            switch (state)
             {
                 case State.Idle:
                     //1 << 6인 이유는 Player의 Layer가 6이기 때문
-                    if (Physics.CheckSphere(transform.position, attackRange, 1 << 6, QueryTriggerInteraction.Ignore))
+                    if (Physics.CheckSphere(transform.position, attackRange, 1 << 6, QueryTriggerInteraction.Ignore) && targetPlayer != null)
                     {
                         nextState = State.Attack;
                         targetPlayer = null;
                     }
                     else
                     {
-                        nextState = State.Walk;
+                        nextState = State.Wander;
                     }
                     break;
-                case State.Walk:
+                case State.Wander:
                     if ((this.transform.position.x == destination.x) && (this.transform.position.z == destination.z))
                     {
                         nextState = State.Idle;
@@ -80,10 +87,10 @@ public class Enemy : MonoBehaviour
                         var dist = Vector3.Distance(transform.position, targetPlayer.transform.position);
                         if (dist > detectionOutRange)
                         {
-                            nextState = State.Walk;
+                            nextState = State.Wander;
                             targetPlayer = null;
                         }
-                        else if (dist <= attackRange)
+                        else if (dist <= attackRange && targetPlayer != null)
                         {
                             nextState = State.Attack;
                             targetPlayer = null;
@@ -97,20 +104,20 @@ public class Enemy : MonoBehaviour
                         attackDone = false;
                     }
                     break;
-                //insert code here...
+                    //insert code here...
             }
         }
-        
+
         //2. 스테이트 초기화
-        if (nextState != State.None) 
+        if (nextState != State.None)
         {
             state = nextState;
             nextState = State.None;
-            switch (state) 
+            switch (state)
             {
                 case State.Idle:
                     break;
-                case State.Walk:
+                case State.Wander:
                     Walk();
                     break;
                 case State.Target:
@@ -119,10 +126,10 @@ public class Enemy : MonoBehaviour
                 case State.Attack:
                     Attack();
                     break;
-                //insert code here...
+                    //insert code here...
             }
         }
-        
+
         //3. 글로벌 & 스테이트 업데이트
         //insert code here...
         CheckFrontDetection();
@@ -146,7 +153,7 @@ public class Enemy : MonoBehaviour
 
     private void CheckFrontDetection()
     {
-        if (state == State.Target && targetPlayer != null)
+        if (state == State.Target && targetPlayer != null && currentHp > 0)
         {
             navMeshAgent.SetDestination(targetPlayer.transform.position);
         }
@@ -155,20 +162,28 @@ public class Enemy : MonoBehaviour
         if (Physics.Raycast(transform.position, transform.forward, out hit, detectionRange, 1 << 6, QueryTriggerInteraction.Ignore))
         {
             targetPlayer = hit.collider.gameObject;
+            player = targetPlayer.GetComponent<Player>();
             detectPlayer = true;
         }
     }
-    
+
     private void Attack() //현재 공격은 애니메이션만 작동합니다.
     {
         animator.SetTrigger("attack");
+
+        if (player == null && targetPlayer != null)
+        {
+            player = targetPlayer.GetComponent<Player>();
+        }
+
+        player.TakeDamage(10f);
     }
 
     public void InstantiateFx() //Unity Animation Event 에서 실행됩니다.
     {
         Instantiate(splashFx, transform.position, Quaternion.identity);
     }
-    
+
     public void WhenAnimationDone() //Unity Animation Event 에서 실행됩니다.
     {
         attackDone = true;
@@ -181,5 +196,21 @@ public class Enemy : MonoBehaviour
         //해당 함수는 없어도 기능 상의 문제는 없지만, 기능 체크 및 디버깅을 용이하게 합니다.
         Gizmos.color = new Color(1f, 0f, 0f, 0.5f);
         Gizmos.DrawSphere(transform.position, attackRange);
+    }
+
+    public void TakeDamage(float damage)
+    {
+        currentHp -= damage;
+        if (currentHp <= 0)
+        {
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        animator.SetTrigger("die");
+        navMeshAgent.enabled = false;
+        Destroy(gameObject, 3f);
     }
 }

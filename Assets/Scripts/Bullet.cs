@@ -9,7 +9,6 @@ public class Bullet : MonoBehaviour
     private float timer;
     private ObjectPool<GameObject> pool;
 
-
     public void SetPool(ObjectPool<GameObject> bulletPool)
     {
         pool = bulletPool;
@@ -34,6 +33,7 @@ public class Bullet : MonoBehaviour
         if (collision.gameObject.layer == LayerMask.NameToLayer("Enemy"))
         {
             ShowVFX();
+            collision.gameObject.GetComponent<Enemy>().TakeDamage(10f);
         }
         ReturnToPool();
     }
