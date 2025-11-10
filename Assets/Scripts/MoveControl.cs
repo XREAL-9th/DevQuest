@@ -1,8 +1,6 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
+using UnityEngine.UI; // Canvas 내 오브젝트 제어용
 
 public class MoveControl : MonoBehaviour
 {
@@ -15,8 +13,14 @@ public class MoveControl : MonoBehaviour
     [SerializeField][Range(1f, 10f)] private float jumpAmount = 5f;
     [SerializeField][Range(1f, 3f)] private float runMultiplier = 1.8f;
     [SerializeField][Range(50f, 500f)] private float mouseSensitivity = 150f;
-    [SerializeField] private Transform cameraTransform; // 플레이어 자식 카메라
+    [SerializeField] private Transform cameraTransform;
     [SerializeField][Range(30f, 90f)] private float maxLookAngle = 80f;
+
+    [Header("Player Health Settings")]
+    [SerializeField] private int maxHealth = 3; // 총 체력
+    private int currentHealth;
+
+    [SerializeField] private GameObject gameOverPanel; // 게임오버 패널 (Canvas 안의 Panel 연결)
 
     public enum State
     {
@@ -50,11 +54,16 @@ public class MoveControl : MonoBehaviour
 
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
+
+        currentHealth = maxHealth; // 체력 초기화
+
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(false); // 시작 시 게임오버 패널 비활성화
     }
 
     private void Update()
     {
-        HandleMouseLook(); // LateUpdate에서 호출 → 끊김 방지
+        HandleMouseLook();
 
         stateTime += Time.deltaTime;
         CheckLanded();
@@ -100,16 +109,13 @@ public class MoveControl : MonoBehaviour
         }
     }
 
-
     private void HandleMouseLook()
     {
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
 
-        // 플레이어 좌우 회전
         transform.Rotate(Vector3.up * mouseX);
 
-        // 카메라 상하 회전 (로컬 기준)
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -maxLookAngle, maxLookAngle);
         cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
@@ -147,5 +153,39 @@ public class MoveControl : MonoBehaviour
 
         transform.Translate(currentSpeed * Time.deltaTime * direction, Space.World);
     }
-}
 
+    // -------------------------------
+    // 💥 Enemy 충돌 시 데미지 처리
+    // -------------------------------
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("enemy"))
+        {
+            TakeDamage(1); // 한 번 닿으면 1 데미지
+        }
+    }
+
+    private void TakeDamage(int damage)
+    {
+        currentHealth -= damage;
+        Debug.Log($"플레이어 피격! 남은 체력: {currentHealth}");
+
+        if (currentHealth <= 0)
+        {
+            GameOver();
+        }
+    }
+
+    private void GameOver()
+    {
+        Debug.Log("게임오버!");
+
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
+
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(true); // 게임오버 패널 활성화
+
+        Time.timeScale = 0f; // 게임 정지
+    }
+}

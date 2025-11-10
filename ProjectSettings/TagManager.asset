@@ -5,6 +5,8 @@ TagManager:
   serializedVersion: 3
   tags:
   - FxTemporaire
+  - bullet
+  - enemy
   layers:
   - Default
   - TransparentFX

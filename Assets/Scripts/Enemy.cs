@@ -1,104 +1,278 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
-using Random = UnityEngine.Random;
 
 public class Enemy : MonoBehaviour
 {
-    [Header("Preset Fields")] 
+    [Header("References")]
     [SerializeField] private Animator animator;
-    [SerializeField] private GameObject splashFx;
-    
+    [SerializeField] private NavMeshAgent agent;
+    [SerializeField] private Transform player;
+
     [Header("Settings")]
-    [SerializeField] private float attackRange;
-    
-    public enum State 
+    [SerializeField] private float detectRange = 10f;
+    [SerializeField] private float detectAngle = 60f;
+    [SerializeField] private float wanderRadius = 8f;
+    [SerializeField] private float wanderInterval = 4f;
+    [SerializeField] private float wanderSpeed = 2.0f;
+    [SerializeField] private float chaseSpeed = 3.5f;
+    [SerializeField] private float dashDistance = 3f;
+    [SerializeField] private float dashDuration = 1.2f;
+
+    [Header("Health Settings")]
+    [SerializeField] private int maxHealth = 3; // 피격 허용 횟수 (총알 3번 맞으면 사망)
+    private int currentHealth;
+
+    public enum State
     {
         None,
         Idle,
-        Attack
+        Wander,
+        Chase,
+        Dash
     }
-    
+
     [Header("Debug")]
     public State state = State.None;
     public State nextState = State.None;
 
-    private bool attackDone;
+    private Vector3 wanderCenter;
+    private float wanderTimer;
 
     private void Start()
-    { 
+    {
+        if (agent == null) agent = GetComponent<NavMeshAgent>();
+        if (player == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null) player = p.transform;
+        }
+
         state = State.None;
         nextState = State.Idle;
+        wanderCenter = transform.position;
+        wanderTimer = wanderInterval;
+
+        currentHealth = maxHealth; // 시작 체력 세팅
     }
 
     private void Update()
     {
-        //1. 스테이트 전환 상황 판단
-        if (nextState == State.None) 
+        if (nextState == State.None)
         {
-            switch (state) 
+            switch (state)
             {
                 case State.Idle:
-                    //1 << 6인 이유는 Player의 Layer가 6이기 때문
-                    if (Physics.CheckSphere(transform.position, attackRange, 1 << 6, QueryTriggerInteraction.Ignore))
-                    {
-                        nextState = State.Attack;
-                    }
+                    if (IsPlayerVisible())
+                        nextState = State.Chase;
+                    else
+                        nextState = State.Wander;
                     break;
-                case State.Attack:
-                    if (attackDone)
-                    {
-                        nextState = State.Idle;
-                        attackDone = false;
-                    }
+
+                case State.Wander:
+                    if (IsPlayerVisible())
+                        nextState = State.Chase;
                     break;
-                //insert code here...
+
+                case State.Chase:
+                    if (!player) break;
+
+                    float dist = Vector3.Distance(transform.position, player.position);
+
+                    if (dist <= dashDistance)
+                        nextState = State.Dash;
+                    else if (!IsPlayerVisible())
+                        nextState = State.Wander;
+                    break;
+
+                case State.Dash:
+                    break;
             }
         }
-        
-        //2. 스테이트 초기화
-        if (nextState != State.None) 
+
+        if (nextState != State.None)
         {
             state = nextState;
             nextState = State.None;
-            switch (state) 
+
+            switch (state)
             {
                 case State.Idle:
+                    EnterIdle();
                     break;
-                case State.Attack:
-                    Attack();
+                case State.Wander:
+                    EnterWander();
                     break;
-                //insert code here...
+                case State.Chase:
+                    EnterChase();
+                    break;
+                case State.Dash:
+                    EnterDash();
+                    break;
             }
         }
-        
-        //3. 글로벌 & 스테이트 업데이트
-        //insert code here...
+
+        switch (state)
+        {
+            case State.Wander:
+                UpdateWander();
+                break;
+            case State.Chase:
+                UpdateChase();
+                break;
+            case State.Dash:
+                break;
+        }
     }
-    
-    private void Attack() //현재 공격은 애니메이션만 작동합니다.
+
+    // --------------------------
+    // 상태별 함수 정의
+    // --------------------------
+
+    private void EnterIdle()
     {
+        animator.ResetTrigger("walk");
+        animator.ResetTrigger("attack");
+        animator.ResetTrigger("dash");
+        animator.SetTrigger("idle");
+
+        agent.ResetPath();
+    }
+
+    private void EnterWander()
+    {
+        animator.ResetTrigger("idle");
+        animator.ResetTrigger("attack");
+        animator.ResetTrigger("dash");
+        animator.SetTrigger("walk");
+
+        agent.speed = wanderSpeed;
+        MoveToRandomPoint();
+    }
+
+    private void UpdateWander()
+    {
+        wanderTimer -= Time.deltaTime;
+
+        if (agent.remainingDistance < 0.5f || wanderTimer <= 0f)
+        {
+            MoveToRandomPoint();
+            wanderTimer = wanderInterval;
+        }
+    }
+
+    private void EnterChase()
+    {
+        animator.ResetTrigger("idle");
+        animator.ResetTrigger("walk");
+        animator.ResetTrigger("dash");
         animator.SetTrigger("attack");
+
+        agent.speed = chaseSpeed;
     }
 
-    public void InstantiateFx() //Unity Animation Event 에서 실행됩니다.
+    private void UpdateChase()
     {
-        Instantiate(splashFx, transform.position, Quaternion.identity);
-    }
-    
-    public void WhenAnimationDone() //Unity Animation Event 에서 실행됩니다.
-    {
-        attackDone = true;
+        if (player)
+            agent.SetDestination(player.position);
     }
 
+    private void EnterDash()
+    {
+        animator.ResetTrigger("idle");
+        animator.ResetTrigger("walk");
+        animator.ResetTrigger("attack");
+        animator.SetTrigger("dash");
+
+        if (player)
+        {
+            agent.speed = chaseSpeed * 2.5f;
+            agent.SetDestination(player.position);
+        }
+
+        Invoke(nameof(EndDash), dashDuration);
+    }
+
+    private void EndDash()
+    {
+        if (IsPlayerVisible())
+            nextState = State.Chase;
+        else
+            nextState = State.Wander;
+    }
+
+    // --------------------------
+    // 보조 기능 함수
+    // --------------------------
+
+    private void MoveToRandomPoint()
+    {
+        Vector2 randomCircle = Random.insideUnitCircle * wanderRadius;
+        Vector3 randomPoint = wanderCenter + new Vector3(randomCircle.x, 0, randomCircle.y);
+
+        if (NavMesh.SamplePosition(randomPoint, out NavMeshHit hit, 2f, NavMesh.AllAreas))
+            agent.SetDestination(hit.position);
+    }
+
+    private bool IsPlayerVisible()
+    {
+        if (player == null) return false;
+
+        Vector3 dirToPlayer = player.position - transform.position;
+        float distToPlayer = dirToPlayer.magnitude;
+
+        if (distToPlayer > detectRange) return false;
+
+        float angle = Vector3.Angle(transform.forward, dirToPlayer);
+        if (angle > detectAngle / 2f) return false;
+
+        if (Physics.Raycast(transform.position + Vector3.up, dirToPlayer.normalized, out RaycastHit hit, detectRange))
+        {
+            if (hit.transform == player)
+                return true;
+        }
+
+        return false;
+    }
+
+    // --------------------------
+    // 체력 및 피격 처리
+    // --------------------------
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("bullet"))
+        {
+            TakeDamage(1); // 총알 한 발에 1의 피해
+            Destroy(other.gameObject); // 총알 제거
+        }
+    }
+
+    private void TakeDamage(int damage)
+    {
+        currentHealth -= damage;
+
+        if (currentHealth <= 0)
+        {
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        // 사망 애니메이션이나 이펙트 추가 가능
+        Destroy(gameObject);
+    }
+    public void InstantiateFx() { }
 
     private void OnDrawGizmosSelected()
     {
-        //Gizmos를 사용하여 공격 범위를 Scene View에서 확인할 수 있게 합니다. (인게임에서는 볼 수 없습니다.)
-        //해당 함수는 없어도 기능 상의 문제는 없지만, 기능 체크 및 디버깅을 용이하게 합니다.
-        Gizmos.color = new Color(1f, 0f, 0f, 0.5f);
-        Gizmos.DrawSphere(transform.position, attackRange);
+        Gizmos.color = new Color(0f, 1f, 0f, 0.25f);
+        Gizmos.DrawSphere(transform.position, wanderRadius);
+
+        Gizmos.color = new Color(0f, 0f, 1f, 0.25f);
+        Gizmos.DrawSphere(transform.position, detectRange);
+
+        Gizmos.color = new Color(1f, 0.5f, 0f, 0.35f);
+        Gizmos.DrawSphere(transform.position, dashDistance);
     }
 }
