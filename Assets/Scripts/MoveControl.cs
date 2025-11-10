@@ -37,11 +37,14 @@ public class MoveControl : MonoBehaviour
     private float stateTime;
     private Vector3 forward, right;
 
+    private float currentSpeed;
+
     private void Start()
     {
         rigid = GetComponent<Rigidbody>();
         col = GetComponent<CapsuleCollider>();
 
+        currentSpeed = moveSpeed;
         state = State.None;
         nextState = State.Idle;
         stateTime = 0f;
@@ -133,17 +136,24 @@ public class MoveControl : MonoBehaviour
     {
         var direction = Vector3.zero;
 
+        forward = transform.forward;
+        right = transform.right;
+
         if (Input.GetKey(KeyCode.W)) direction += forward; //Forward
         if (Input.GetKey(KeyCode.A)) direction += -right; //Left
         if (Input.GetKey(KeyCode.S)) direction += -forward; //Back
         if (Input.GetKey(KeyCode.D)) direction += right; //Right
 
-        float currentSpeed = moveSpeed;
         if (Input.GetKey(KeyCode.LeftShift) && Input.GetKey(KeyCode.W))
-        {
             currentSpeed = moveSpeed * 2f;
-        }
+        else
+            currentSpeed = moveSpeed;
 
-        transform.Translate(currentSpeed * Time.deltaTime * direction);
+        // 대각선 이동 시 속도 균등하게
+        direction = direction.normalized;
+
+        // Rigidbody.MovePosition으로 이동
+        Vector3 targetPos = rigid.position + direction * currentSpeed * Time.fixedDeltaTime;
+        rigid.MovePosition(targetPos);
     }
 }
