@@ -152,6 +152,7 @@ public class Enemy : MonoBehaviour
             case State.Die:
                 if(dieDone){
                     Destroy(this.gameObject);
+                    GameManager.Instance.AddScore();
                 }
                 break;
         }

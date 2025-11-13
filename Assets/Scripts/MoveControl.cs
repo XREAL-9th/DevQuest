@@ -156,6 +156,8 @@ public class MoveControl : MonoBehaviour
             bulletRb.linearVelocity = Vector3.zero;
             bulletRb.angularVelocity = Vector3.zero;
             bulletRb.AddForce(dir*50, ForceMode.Impulse);
+
+            GetComponent<AudioSource>().Play();
         }
     }
 

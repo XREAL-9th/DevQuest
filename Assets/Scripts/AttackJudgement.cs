@@ -11,12 +11,15 @@ public class AttackJudgement : MonoBehaviour
     [SerializeField] 
     private GameOver_Observer gameOver_Observer = null;
 
+    private EnemyHP enemyHP = null;
+
+
     // 플레이어의 체력
     private float originMyHp = 100f; 
     private float currentMyHp = 0f;
 
     // 적의 체력
-    private float originEnemyHp = 100f;
+    //private float originEnemyHp = 50f;
     private float currentEnemyHp = 0f;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -25,8 +28,8 @@ public class AttackJudgement : MonoBehaviour
         this.originMyHp = 100f; 
         this.currentMyHp = this.originMyHp;
 
-        this.originEnemyHp = 50f;
-        this.currentEnemyHp = this.originEnemyHp;
+        //this.originEnemyHp = 50f;
+        //this.currentEnemyHp = this.originEnemyHp;
 
         // 옵저버 등록
         this.hp_Subject.RegisterObserver(this.myHp_Observer); 
@@ -34,13 +37,14 @@ public class AttackJudgement : MonoBehaviour
 
         this.myHp_Observer.Init(this.hp_Subject);
         this.gameOver_Observer.Init(this.hp_Subject);
+
         
     }
 
     // Update is called once per frame
     void Update()
     {
-        
+
     }
 
     private void OnCollisionEnter(Collision other) 
@@ -56,6 +60,7 @@ public class AttackJudgement : MonoBehaviour
             } 
             this.hp_Subject.Changed(this.currentMyHp, this.currentEnemyHp); 
         } 
+        /*
         else if(this.gameObject.CompareTag("Enemy")&&other.gameObject.CompareTag("Bullet")) 
         { 
             Debug.Log("적이 총알에 맞음 - 체력 10 감소");
@@ -67,6 +72,7 @@ public class AttackJudgement : MonoBehaviour
                 this.gameObject.GetComponent<Enemy>().isDie = true;
             } 
             this.hp_Subject.Changed(this.currentMyHp, this.currentEnemyHp); 
-        }
+            this.enemyHP.SetHpBar(this.currentEnemyHp);
+        }*/
     }
 }
