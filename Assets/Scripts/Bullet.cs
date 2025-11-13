@@ -7,25 +7,31 @@ public class Bullet : MonoBehaviour
 
     void Start() => Destroy(gameObject, lifeTime);
 
-    void OnCollisionEnter(Collision collision)
-    {
-        if (collision.collider.CompareTag("Enemy"))
-        {
-            // 1) 충돌 지점과 적의 질량중심을 이용해 "밖으로" 밀 방향 계산
-            Rigidbody enemyRb = collision.rigidbody; // 맞은 쪽의 Rigidbody
-            if (enemyRb != null)
-            {
-                // 첫 접촉점
-                ContactPoint cp = collision.GetContact(0);
-                // 적의 질량중심 -> 접촉점의 반대방향(=적을 밖으로 미는 방향)
-                Vector3 dir = (enemyRb.worldCenterOfMass - cp.point).normalized;
+    // 콜리전/트리거 둘 다 커버하려면 두 개 다 넣어도 OK
+    void OnTriggerEnter(Collider other) => HandleHit(other, other.attachedRigidbody);
+    void OnCollisionEnter(Collision collision) => HandleHit(collision.collider, collision.rigidbody);
 
-                // 힘을 접촉 위치에서 가해주면 더 자연스럽게 밀림
-                enemyRb.AddForceAtPosition(dir * knockbackForce, cp.point, ForceMode.Impulse);
+    void HandleHit(Component hit, Rigidbody rb)
+    {
+        // 1) 적 찾기 (부모/자식 어디든)
+        var enemy = hit.GetComponentInParent<EnemyHitCounter>() ?? hit.GetComponent<EnemyHitCounter>();
+        if (enemy != null)
+        {
+            Debug.Log($"[Bullet] Hit {enemy.name}");
+            enemy.TakeHit(1);
+
+            // 2) 넉백(옵션)
+            if (rb != null)
+            {
+                Vector3 dir = (rb.worldCenterOfMass - transform.position).normalized;
+                rb.AddForce(dir * knockbackForce, ForceMode.Impulse);
             }
+
+            Destroy(gameObject);
+            return;
         }
 
-        // 무엇이든 맞으면 총알 제거
+        // 적이 아니어도 뭔가에 닿으면 제거
         Destroy(gameObject);
     }
 }
