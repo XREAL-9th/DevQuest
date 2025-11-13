@@ -39,7 +39,6 @@ public class Player : MonoBehaviour, IDamageable
         {
             Die();
         }
-    
     }
 
     private void UpdateHealthUI()
@@ -76,11 +75,17 @@ public class Player : MonoBehaviour, IDamageable
             Instantiate(deathEffect, transform.position, Quaternion.identity);
         }
 
-        // 게임 오버 처리 
-        Time.timeScale = 0; // 게임 일시정지
-        // 또는 씬 재시작: SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        // GameManager에 게임 오버 알림
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.GameOver();
+        }
+        else
+        {
+            // GameManager가 없을 경우 기본 동작
+            Time.timeScale = 0;
+        }
 
-        gameObject.SetActive(false); // 플레이어 비활성화
+        // gameObject.SetActive(false); // 플레이어 비활성화
     }
-
 }

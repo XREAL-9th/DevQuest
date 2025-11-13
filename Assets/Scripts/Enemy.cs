@@ -66,7 +66,7 @@ public class Enemy : MonoBehaviour, IDamageable
 
         if (healthBarCanvas != null)
         {
-            healthBarCanvas.gameObject.SetActive(true); // true로 변경!
+            healthBarCanvas.gameObject.SetActive(true);
         }
         UpdateHealthBar();
 
@@ -275,6 +275,12 @@ public class Enemy : MonoBehaviour, IDamageable
 
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = false;
+
+        // GameManager에 적 사망 알림
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.RegisterEnemyDeath();
+        }
 
         Destroy(gameObject, 2f);
     }
