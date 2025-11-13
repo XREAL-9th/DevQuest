@@ -14,8 +14,8 @@ public class MoveControl : MonoBehaviour
     [SerializeField][Range(1f, 10f)] private float moveSpeed;
     [SerializeField][Range(1f, 5f)] private float runMultiplier;
     [SerializeField][Range(1f, 10f)] private float jumpAmount;
+    [SerializeField][Range(1, 5)] private int maxJumpCount = 2;
 
-    //FSM(finite state machine)에 대한 더 자세한 내용은 세션 3회차에서 배울 것입니다!
     public enum State
     {
         None,
@@ -28,6 +28,7 @@ public class MoveControl : MonoBehaviour
     public State nextState = State.None;
     public bool landed = false;
     public bool moving = false;
+    public int jumpCount = 0;
 
     private float stateTime;
     private Vector3 forward, right;
@@ -40,8 +41,6 @@ public class MoveControl : MonoBehaviour
         state = State.None;
         nextState = State.Idle;
         stateTime = 0f;
-        forward = transform.forward;
-        right = transform.right;
     }
 
     private void Update()
@@ -56,16 +55,21 @@ public class MoveControl : MonoBehaviour
             switch (state)
             {
                 case State.Idle:
-                    if (landed)
+                    if (landed && Input.GetKeyDown(KeyCode.Space))
                     {
-                        if (Input.GetKey(KeyCode.Space))
-                        {
-                            nextState = State.Jump;
-                        }
+                        nextState = State.Jump;
                     }
                     break;
                 case State.Jump:
-                    if (landed)
+                    
+                    if (!landed)
+                    {
+                        if (Input.GetKeyDown(KeyCode.Space) && jumpCount >0)
+                        {
+                            Jump();
+                        }
+                    }
+                    else if (stateTime > 0.1f)
                     {
                         nextState = State.Idle;
                     }
@@ -80,23 +84,30 @@ public class MoveControl : MonoBehaviour
             nextState = State.None;
             switch (state)
             {
-                case State.Jump:
-                    var vel = rigid.linearVelocity;
-                    vel.y = jumpAmount;
-                    rigid.linearVelocity = vel;
+                case State.Idle:
+                    jumpCount = maxJumpCount;
                     break;
-                    //insert code here...
+                case State.Jump:
+                    Jump();
+                    break;
             }
             stateTime = 0f;
         }
-
-        //3. 글로벌 & 스테이트 업데이트
-        //insert code here...
     }
 
     private void FixedUpdate()
     {
         UpdateInput();
+    }
+
+    private void Jump()
+    {
+        var vel = rigid.linearVelocity;
+        vel.y = jumpAmount;
+        rigid.linearVelocity = vel;
+
+        jumpCount--;
+        landed = false;
     }
 
     private void CheckLanded()
@@ -110,8 +121,10 @@ public class MoveControl : MonoBehaviour
 
     private void UpdateInput()
     {
-        var direction = Vector3.zero;
+        forward = transform.forward;
+        right = transform.right;
 
+        var direction = Vector3.zero;
 
         if (Input.GetKey(KeyCode.W)) direction += forward; //Forward
         if (Input.GetKey(KeyCode.A)) direction += -right; //Left
@@ -127,6 +140,8 @@ public class MoveControl : MonoBehaviour
         bool isRunning = Input.GetKey(KeyCode.LeftShift) && hasInput;
         float speed = isRunning ? runMultiplier * moveSpeed : moveSpeed;
 
-        transform.Translate(speed * Time.deltaTime * direction); //Move
+        Vector3 newVelocity = direction * speed;
+        newVelocity.y = rigid.linearVelocity.y;
+        rigid.linearVelocity = newVelocity;
     }
 }

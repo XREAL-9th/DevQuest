@@ -17,16 +17,20 @@ public class Enemy : MonoBehaviour
     [SerializeField] private float attackRange;
     [SerializeField] private float detectionRange;
     [SerializeField] private float fieldOfView;
-    [SerializeField] private Transform[] waypoints;
-    private int currentWaypointIndex = 0;
+    [SerializeField] private float wanderRadius = 30f; 
+    [SerializeField] private float minWanderWaitTime = 2f;
+    [SerializeField] private float maxWanderWaitTime = 5f;
 
+    private float wanderWaitTimer = -1f;
+    private EnemySpawner mySpawner;
 
     public enum State
     {
         None,
-        Idle,
-        Chase,
-        Attack
+        Wander, 
+        Chase, 
+        Attack, 
+        Die
     }
 
     [Header("Debug")]
@@ -38,7 +42,7 @@ public class Enemy : MonoBehaviour
     private void Start()
     {
         state = State.None;
-        nextState = State.Idle;
+        nextState = State.Wander;
 
         nmAgent = GetComponent<NavMeshAgent>();
         if (target == null)
@@ -54,8 +58,7 @@ public class Enemy : MonoBehaviour
         {
             switch (state)
             {
-                case State.Idle:
-                    //1 << 6인 이유는 Player의 Layer가 6이기 때문
+                case State.Wander:
                     if (CanSeeTarget())
                     {
                         nextState = State.Chase;
@@ -69,17 +72,19 @@ public class Enemy : MonoBehaviour
                     }
                     else if (!CanSeeTarget())
                     {
-                        nextState = State.Idle;
+                        nextState = State.Wander;
                     }
                     break;
                 case State.Attack:
                     if (attackDone)
                     {
-                        nextState = State.Idle;
+                        nextState = State.Wander;
                         attackDone = false;
                     }
                     break;
-                    //insert code here...
+                case State.Die:
+                    Die();
+                    break;
             }
         }
 
@@ -90,11 +95,15 @@ public class Enemy : MonoBehaviour
             nextState = State.None;
             switch (state)
             {
-                case State.Idle:
+                case State.Wander:
                     break;
                 case State.Chase:
+                    if (target != null)
+                        nmAgent.SetDestination(target.position);
                     break;
                 case State.Attack:
+                    if(target != null)
+                        transform.LookAt(target.position);
                     Attack();
                     break;
 
@@ -104,15 +113,25 @@ public class Enemy : MonoBehaviour
         //3. 글로벌 & 스테이트 업데이트
         switch (state)
         {
-            case State.Idle:
-                if (!nmAgent.pathPending && nmAgent.remainingDistance < 1f)
+            case State.Wander:
+                if (wanderWaitTimer > 0)
                 {
-                    GoNextWaypoint();
+                    wanderWaitTimer -= Time.deltaTime;
+                    if (wanderWaitTimer <= 0)
+                    {
+                        GoToRandomPoint();
+                    }
+                }
+                else
+                {
+                    if (!nmAgent.pathPending && (nmAgent.remainingDistance < 0.5f || !nmAgent.hasPath))
+                    {
+                        nmAgent.ResetPath();
+                        wanderWaitTimer = Random.Range(minWanderWaitTime, maxWanderWaitTime);
+                    }
                 }
                 break;
             case State.Chase:
-                if (target != null)
-                    nmAgent.SetDestination(target.position);
                 break;
             case State.Attack:
                 break;
@@ -138,6 +157,20 @@ public class Enemy : MonoBehaviour
         return true;
     }
 
+    private void GoToRandomPoint()
+    {
+        Vector3 randomDirection = Random.insideUnitSphere * wanderRadius;
+        randomDirection += transform.position;
+
+        NavMeshHit navHit;
+        if (NavMesh.SamplePosition(randomDirection, out navHit, wanderRadius, NavMesh.AllAreas))
+        {
+            nmAgent.SetDestination(navHit.position);
+            wanderWaitTimer = -1f; 
+        }
+    }
+
+    /*
     private void GoNextWaypoint()
     {
         if ((waypoints.Length == 0))
@@ -147,7 +180,7 @@ public class Enemy : MonoBehaviour
         nmAgent.SetDestination(waypoints[currentWaypointIndex].position);
         currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
     }
-
+    */
     private void Attack() //현재 공격은 애니메이션만 작동합니다.
     {
         animator.SetTrigger("attack");
@@ -161,6 +194,15 @@ public class Enemy : MonoBehaviour
     public void WhenAnimationDone() //Unity Animation Event 에서 실행됩니다.
     {
         attackDone = true;
+    }
+
+    public void Die()
+    {
+        if(mySpawner != null)
+        {
+            mySpawner.NotifyEnemyDeath();
+        }
+        Destroy(gameObject);
     }
 
 
