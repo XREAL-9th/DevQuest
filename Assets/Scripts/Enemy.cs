@@ -21,6 +21,7 @@ public class Enemy : MonoBehaviour
     [Header("Health Settings")]
     [SerializeField] private int maxHealth = 3; // 피격 허용 횟수 (총알 3번 맞으면 사망)
     private int currentHealth;
+    public float Health01 => Mathf.Clamp01((float)currentHealth / Mathf.Max(1, maxHealth));
 
     public enum State
     {
@@ -260,6 +261,7 @@ public class Enemy : MonoBehaviour
     private void Die()
     {
         // 사망 애니메이션이나 이펙트 추가 가능
+        GameManager.Instance?.OnEnemyDefeated(); // ✅ 적 처치 보고
         Destroy(gameObject);
     }
     public void InstantiateFx() { }

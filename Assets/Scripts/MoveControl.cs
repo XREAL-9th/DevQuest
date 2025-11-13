@@ -172,9 +172,10 @@ public class MoveControl : MonoBehaviour
 
         if (currentHealth <= 0)
         {
-            GameOver();
+            GameManager.Instance?.GameOver();
         }
     }
+
 
     private void GameOver()
     {
