@@ -46,11 +46,11 @@ public class Enemy : MonoBehaviour
     private Vector3 lastWanderPoint;
 
     [Header("Charge")]
-    [SerializeField] private float chargeRange = 8f;             // 돌진을 시작할 최대 거리
-    [SerializeField] private float chargeReadyTime = 0.4f;       // 텔레그래프(준비) 시간
-    [SerializeField] private float chargeDuration = 0.7f;        // 실제 돌진 지속 시간
-    [SerializeField] private float chargeSpeedMultiplier = 2.5f; // 돌진 중 속도 배수
-    [SerializeField] private float chargeCooldown = 4f;          // 돌진 쿨다운
+    [SerializeField] private float chargeRange = 8f; 
+    [SerializeField] private float chargeReadyTime = 0.4f;
+    [SerializeField] private float chargeDuration = 0.7f;
+    [SerializeField] private float chargeSpeedMultiplier = 2.5f;
+    [SerializeField] private float chargeCooldown = 4f;
     private float nextChargeTime = 0f;
     private float savedAgentSpeed = 0f;
     private Coroutine chargeRoutine;
@@ -86,7 +86,6 @@ public class Enemy : MonoBehaviour
                 case State.Idle:
                     if (PlayerVisibleInFront(out float dIdle))
                     {
-                        // 우선순위: 근접공격 > 돌진 > 추격
                         if (dIdle <= attackRange)
                             nextState = State.Attack;
                         else if (dIdle <= chargeRange && Time.time >= nextChargeTime)
@@ -100,7 +99,6 @@ public class Enemy : MonoBehaviour
                             nextState = State.Patrol;
                     }
 
-                    // 기존의 근접 감지(레이어 6 사용) 유지
                     if (Physics.CheckSphere(transform.position, attackRange, 1 << 6, QueryTriggerInteraction.Ignore))
                         nextState = State.Attack;
                     break;
@@ -138,7 +136,6 @@ public class Enemy : MonoBehaviour
                     break;
 
                 case State.Charge:
-                    // Charge는 코루틴이 끝날 때 nextState를 셋한다.
                     break;
 
                     //insert code here...
@@ -148,7 +145,6 @@ public class Enemy : MonoBehaviour
         //2. 스테이트 초기화
         if (nextState != State.None)
         {
-            // Charge 중 다른 상태로 넘어가면 코루틴 정리
             if (state == State.Charge && chargeRoutine != null)
             {
                 StopCoroutine(chargeRoutine);
@@ -174,7 +170,7 @@ public class Enemy : MonoBehaviour
                     Attack();
                     break;
 
-                case State.Patrol: // Wander 시작
+                case State.Patrol:
                     PickAndSetWanderPoint();
                     if (animator != null) animator.SetFloat("speed", 0.5f);
                     break;
@@ -222,11 +218,9 @@ public class Enemy : MonoBehaviour
         Vector3 toPlayer = player.position - transform.position;
         distance = toPlayer.magnitude;
 
-        // 각도 판정
         float angle = Vector3.Angle(transform.forward, toPlayer.normalized);
         if (angle > viewAngle) return false;
 
-        // 거리 판정
         if (distance > viewDistance) return false;
 
         return true;
@@ -260,11 +254,10 @@ public class Enemy : MonoBehaviour
 
         savedAgentSpeed = agent.speed;
         agent.ResetPath();
-        agent.isStopped = true; // 텔레그래프 동안 멈춤
+        agent.isStopped = true;
 
         if (animator != null) animator.SetTrigger("chargeReady");
 
-        // 돌진 코루틴 시작
         if (chargeRoutine != null) StopCoroutine(chargeRoutine);
         chargeRoutine = StartCoroutine(DoCharge());
     }
@@ -280,12 +273,10 @@ public class Enemy : MonoBehaviour
             yield break;
         }
 
-        // 돌진 시작
         agent.isStopped = false;
         agent.speed = savedAgentSpeed * chargeSpeedMultiplier;
         if (animator != null) animator.SetBool("charging", true);
 
-        // 돌진 목표점: 현재 플레이어 위치로 고정 (유도 돌진을 원하면 매 프레임 SetDestination 갱신)
         Vector3 target = player != null ? player.position : transform.position + transform.forward * 5f;
         agent.SetDestination(target);
 

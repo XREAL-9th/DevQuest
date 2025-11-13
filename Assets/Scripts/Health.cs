@@ -5,6 +5,9 @@ public class Health : MonoBehaviour
     public int maxHP = 30;
     int hp;
 
+    public int CurrentHP => hp;
+    public int MaxHP => maxHP;
+
     void Awake() => hp = maxHP;
 
     public void TakeDamage(int amount)

@@ -1,29 +1,45 @@
 using UnityEngine;
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance;   // 싱글턴 접근용
-    private int totalEnemies;              // 전체 적 수
-    private int defeatedEnemies;           // 죽은 적 수
+    public static GameManager Instance;
+    private int totalEnemies;
+    private int defeatedEnemies;
+    private bool gameEnded;
+
+    [Header("UI References")]
+    [SerializeField] private GameObject winPanel;
+    [SerializeField] private TextMeshProUGUI winText;
+
+    [SerializeField] private TextMeshProUGUI enemyCountText;
 
     void Awake()
     {
-        // 싱글턴 초기화
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
     }
 
     void Start()
     {
-        // Enemy 태그 가진 오브젝트를 모두 세기
         totalEnemies = GameObject.FindGameObjectsWithTag("Enemy").Length;
         defeatedEnemies = 0;
+        gameEnded = false;
+
+        if (winPanel != null)
+            winPanel.SetActive(false);
+
+        UpdateEnemyCountUI();
     }
 
     public void OnEnemyDied()
     {
+        if (gameEnded) return;
+
         defeatedEnemies++;
         Debug.Log($"Enemy defeated {defeatedEnemies}/{totalEnemies}");
+
+        UpdateEnemyCountUI();
 
         if (defeatedEnemies >= totalEnemies)
         {
@@ -33,6 +49,23 @@ public class GameManager : MonoBehaviour
 
     void GameOver()
     {
-        Debug.Log("GAME OVER - 모든 적 처치!");
+        gameEnded = true;
+        Debug.Log("GAME CLEAR");
+
+        if (winPanel != null)
+            winPanel.SetActive(true);
+
+        if (winText != null)
+            winText.text = "YOU WIN!";
+
+        Time.timeScale = 0f;
+    }
+
+    void UpdateEnemyCountUI()
+    {
+        if (enemyCountText == null) return;
+
+        int remaining = Mathf.Max(0, totalEnemies - defeatedEnemies);
+        enemyCountText.text = $"Defeated: {defeatedEnemies}   Remaining: {remaining}/{totalEnemies}";
     }
 }

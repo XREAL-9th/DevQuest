@@ -149,7 +149,6 @@ public class MoveControl : MonoBehaviour
         else
             currentSpeed = moveSpeed;
 
-        // 대각선 이동 시 속도 균등하게
         direction = direction.normalized;
 
         // Rigidbody.MovePosition으로 이동
