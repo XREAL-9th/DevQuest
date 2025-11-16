@@ -17,6 +17,11 @@ public class Shooting : MonoBehaviour
 
     void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentGameState != GameManager.GameState.Playing)
+        {
+            return;
+        }
+
         if (Input.GetMouseButtonDown(0))
         {
             Shoot();
@@ -25,7 +30,6 @@ public class Shooting : MonoBehaviour
 
     private void Shoot()
     {
-        Debug.Log("Shoot");
         Ray ray = playerCamera.ScreenPointToRay(new Vector3(Screen.width /2, Screen.height /2, 0));
         RaycastHit hit;
 

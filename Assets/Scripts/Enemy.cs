@@ -31,6 +31,7 @@ public class Enemy : MonoBehaviour
         Wander, 
         Chase, 
         Attack, 
+        Stun,
         Die
     }
 
@@ -55,11 +56,18 @@ public class Enemy : MonoBehaviour
         if (health != null)
         {
             health.OnDied += Die;
+            health.OnDamaged += HandleDamaged;
         }
     }
 
     private void Update()
     {
+
+        if (animator != null)
+        {
+            animator.SetFloat("Speed", nmAgent.velocity.magnitude);
+        }
+       
         //1. 스테이트 전환 상황 판단
         if (nextState == State.None)
         {
@@ -89,6 +97,8 @@ public class Enemy : MonoBehaviour
                         attackDone = false;
                     }
                     break;
+                case State.Stun:
+                    break;
                 case State.Die:
                     Die();
                     break;
@@ -105,13 +115,15 @@ public class Enemy : MonoBehaviour
                 case State.Wander:
                     break;
                 case State.Chase:
-                    if (target != null)
-                        nmAgent.SetDestination(target.position);
                     break;
                 case State.Attack:
                     if(target != null)
                         transform.LookAt(target.position);
                     Attack();
+                    break;
+                case State.Stun:
+                    nmAgent.ResetPath();
+                    animator.SetTrigger("stun");
                     break;
 
             }
@@ -139,6 +151,8 @@ public class Enemy : MonoBehaviour
                 }
                 break;
             case State.Chase:
+                if (target != null)
+                    nmAgent.SetDestination(target.position);
                 break;
             case State.Attack:
                 break;
@@ -177,7 +191,7 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    private void Attack() //현재 공격은 애니메이션만 작동합니다.
+    private void Attack()
     {
         animator.SetTrigger("attack");
 
@@ -191,23 +205,44 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    public void InstantiateFx() //Unity Animation Event 에서 실행됩니다.
+    public void InstantiateFx() 
     {
         Instantiate(splashFx, transform.position, Quaternion.identity);
     }
 
-    public void WhenAnimationDone() //Unity Animation Event 에서 실행됩니다.
+    public void WhenAnimationDone()
     {
         attackDone = true;
     }
 
+    public void WhenStunAnimationDone()
+    {
+        if (CanSeeTarget())
+        {
+            nextState = State.Chase;
+        }
+        else
+        {
+            nextState = State.Wander;
+        }
+    }
+
     public void Die()
     {
-        if(mySpawner != null)
+        GameManager.Instance.OnEnemyKilled();
+
+        if (mySpawner != null)
         {
             mySpawner.NotifyEnemyDeath();
         }
         Destroy(gameObject);
+        Debug.Log("Enemy Die()");
+    }
+
+    public void HandleDamaged()
+    {
+        if (state == State.Die || state == State.Stun) return;
+        nextState = State.Stun;
     }
 
     public void SetSpawner(EnemySpawner spawner)
@@ -217,8 +252,6 @@ public class Enemy : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        //Gizmos를 사용하여 공격 범위를 Scene View에서 확인할 수 있게 합니다. (인게임에서는 볼 수 없습니다.)
-        //해당 함수는 없어도 기능 상의 문제는 없지만, 기능 체크 및 디버깅을 용이하게 합니다.
         Gizmos.color = new Color(1f, 0f, 0f, 0.5f);
         Gizmos.DrawSphere(transform.position, attackRange);
 

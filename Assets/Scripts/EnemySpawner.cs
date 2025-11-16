@@ -28,7 +28,10 @@ public class EnemySpawner : MonoBehaviour
     public void NotifyEnemyDeath()
     {
         currentMonsterInstance = null;
-        StartCoroutine(RespawnCoroutine(initialSpawnPosition));
+        if (GameManager.Instance.CurrentGameState == GameManager.GameState.Playing)
+        {
+            StartCoroutine(RespawnCoroutine(initialSpawnPosition));
+        }
     }
 
     private IEnumerator RespawnCoroutine(Vector3 pos)
