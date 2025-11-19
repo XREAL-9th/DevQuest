@@ -1,56 +1,88 @@
 using UnityEngine;
-using UnityEngine.UI; // HP바 등 UI를 쓸 경우
+using System;
 
 public class PlayerHealth : MonoBehaviour
 {
+    public static PlayerHealth Instance { get; private set; }
+
     [Header("Health Settings")]
-    public int maxHealth = 5;
+    public int maxHealth = 100;
     public int currentHealth;
 
-    [Header("UI (Optional)")]
-    public Slider healthBar; 
+    public event Action<int, int> OnHealthChanged;
+    public event Action OnPlayerDeath;
 
-    [Header("Effects")]
+    [Header("Optional Effects")]
+    public AudioSource audioSource; 
+    public AudioClip hitClip;
     public GameObject deathEffect;
 
     private bool isDead = false;
+    private PlayerController controller;
+    private PlayerShooting shooter;
+    private Rigidbody rb;
 
-    void Start()
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+
+        controller = GetComponent<PlayerController>();
+        shooter = GetComponent<PlayerShooting>();
+        rb = GetComponent<Rigidbody>();
+    }
+
+    private void Start()
     {
         currentHealth = maxHealth;
-        UpdateHealthUI();
+
+        if (audioSource == null)
+            audioSource = gameObject.AddComponent<AudioSource>();
+
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     public void TakeDamage(int damage)
     {
         if (isDead) return;
 
-        currentHealth -= damage;
-        UpdateHealthUI();
+        currentHealth = Mathf.Max(0, currentHealth - damage);
+
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
+        if (hitClip != null)
+            audioSource.PlayOneShot(hitClip);
 
         if (currentHealth <= 0)
-        {
             Die();
-        }
     }
 
-    void UpdateHealthUI()
+    public void Heal(int amount)
     {
-        if (healthBar != null)
-            healthBar.value = (float)currentHealth / maxHealth;
+        if (isDead) return;
+
+        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
+
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
-    void Die()
+    private void Die()
     {
+        if (isDead) return;
         isDead = true;
-        Debug.Log("Player Died!");
+
+        Debug.Log("[Player] Dead");
 
         if (deathEffect != null)
             Instantiate(deathEffect, transform.position, Quaternion.identity);
 
-        gameObject.SetActive(false);
+        if (controller != null) controller.enabled = false;
+        if (shooter != null) shooter.enabled = false;
 
-        // 게임오버 화면 호출
-        GameManager.Instance.GameOver();
+        if (rb != null) rb.linearVelocity = Vector3.zero;
+
+        GameManager.Instance?.SetGameOver(false);
+
+        OnPlayerDeath?.Invoke();
     }
 }

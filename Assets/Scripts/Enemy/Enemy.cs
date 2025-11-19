@@ -1,30 +1,33 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
+using System.Linq;
 
+[RequireComponent(typeof(NavMeshAgent))]
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(EnemyHealth))]
 public class Enemy : MonoBehaviour
 {
-    // ===== ENUM =====
-    public enum State
-    {
-        None,
-        Idle,
-        Wander,
-        Chase,
-        RangedAttack,
-        Dash,
-        Dead
-    }
+    public enum State { Idle, Walk, Run, Attack, Dash, Die }
+    public State state = State.Idle;
 
     [Header("— Components —")]
     public Animator animator;
     public NavMeshAgent agent;
     public Transform player;
+    public Rigidbody rb;
     public GameObject projectilePrefab;
     public Transform projectileSpawn;
 
+    private EnemyHealth enemyHealth;
+
+    [Header("— Audio —")]
+    public AudioSource audioSource;
+    public AudioClip enemyAttackClip;
+
     [Header("— Detection —")]
-    public float detectRange = 10f;
+    public float detectRange = 12f;
+    public float loseRange = 15f;
     public float attackRange = 6f;
     public float dashRange = 3f;
 
@@ -32,279 +35,405 @@ public class Enemy : MonoBehaviour
     public float wanderRadius = 8f;
     public float wanderDelay = 3f;
 
-    [Header("— Dash —")]
-    public float dashSpeed = 15f;
-    public float dashDuration = 0.4f;
-    public float dashCooldown = 3f;
-
-    [Header("— Ranged Attack —")]
+    [Header("— Attack / Dash —")]
     public float projectileSpeed = 12f;
-    public float attackCooldown = 2f;
+    public float attackCooldown = 1.5f;
+    public float dashCooldown = 3f;
+    public float dashSpeed = 15f;
+    public float dashDuration = 0.35f;
 
-    [Header("— Health —")]
-    public int maxHP = 5;
-    private int currentHP;
+    [Header("— Animator Params —")]
+    public string P_WANDER = "isWander";
+    public string P_RUN = "isRun";
+    public string P_ATTACK = "isAttack";
+    public string P_DASH = "isDash";
+    public string P_DEAD = "isDead";
 
     [Header("— Debug —")]
-    public State state = State.None;
-    public State nextState = State.None;
     public bool showGizmos = true;
 
-    // 내부 제어 변수
-    private bool isDead = false;
-    private bool attackDone;
-    private float wanderTimer;
-    private float attackTimer;
-    private float dashTimer;
-    private float dashCDTimer;
-    private bool dashing;
+    bool isDead => enemyHealth.IsDead;
 
-    void Start()
+    float wanderTimer;
+    float attackTimer;
+    float dashCDTimer;
+
+    bool animatorReady;
+
+    // ----------------------------------------------------------
+    void Awake()
     {
-        if (!agent) agent = GetComponent<NavMeshAgent>();
-        if (!animator) animator = GetComponentInChildren<Animator>();
-        if (!player) player = GameObject.FindGameObjectWithTag("Player")?.transform;
-        if (!projectileSpawn) projectileSpawn = transform;
+        enemyHealth = GetComponent<EnemyHealth>();
+        agent = GetComponent<NavMeshAgent>();
+        rb = GetComponent<Rigidbody>();
+        rb.isKinematic = true;
 
-        currentHP = maxHP;
-        state = State.None;
-        nextState = State.Idle;
-        wanderTimer = wanderDelay;
+        if (!animator)
+            animator = GetComponentInChildren<Animator>();
+
+        if (!audioSource)
+            audioSource = GetComponent<AudioSource>();
+
+        animatorReady = animator && animator.runtimeAnimatorController != null;
     }
 
+    // ----------------------------------------------------------
+    void Start()
+    {
+        enemyHealth.OnDeath += Die;
+        enemyHealth.OnKnockbackApplied += ApplyKnockback;
+
+        wanderTimer = wanderDelay;
+
+        if (PlayerHealth.Instance)
+            player = PlayerHealth.Instance.transform;
+        else
+        {
+            GameObject found = GameObject.FindGameObjectWithTag("Player");
+            if (found) player = found.transform;
+        }
+
+        StartCoroutine(WaitAnimator());
+    }
+
+    IEnumerator WaitAnimator()
+    {
+        yield return null;
+        GoIdle();
+    }
+
+    // ----------------------------------------------------------
     void Update()
     {
-        if (isDead) return;
+        if (!animatorReady || isDead) return;
+
+        // 공통 안전 체크
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
 
         attackTimer -= Time.deltaTime;
         dashCDTimer -= Time.deltaTime;
 
-        // ===== 상태 전이 판단 =====
-        if (nextState == State.None)
-        {
-            switch (state)
-            {
-                case State.Idle:
-                case State.Wander:
-                    if (PlayerInRange(dashRange)) nextState = State.Dash;
-                    else if (PlayerInRange(attackRange)) nextState = State.RangedAttack;
-                    else if (PlayerInRange(detectRange)) nextState = State.Chase;
-                    else if (state == State.Idle) nextState = State.Wander;
-                    break;
+        float dist = player ? Vector3.Distance(transform.position, player.position) : Mathf.Infinity;
 
-                case State.Chase:
-                    if (PlayerInRange(dashRange)) nextState = State.Dash;
-                    else if (PlayerInRange(attackRange)) nextState = State.RangedAttack;
-                    else if (!PlayerInRange(detectRange * 1.5f)) nextState = State.Wander;
-                    else if (!PlayerInRange(detectRange * 2f)) nextState = State.Idle;
-                    break;
-
-                case State.RangedAttack:
-                    if (attackDone) { nextState = State.Chase; attackDone = false; }
-                    break;
-
-                case State.Dash:
-                    if (dashing && dashTimer <= 0f)
-                        nextState = State.Chase;
-                    break;
-            }
-        }
-
-        // ===== 상태 전이 발생 =====
-        if (nextState != State.None)
-        {
-            state = nextState;
-            nextState = State.None;
-
-            switch (state)
-            {
-                case State.Idle:
-                    agent.isStopped = true;
-                    PlayAnim("Idle");
-                    break;
-
-                case State.Wander:
-                    agent.isStopped = false;
-                    PlayAnim("Run");
-                    break;
-
-                case State.Chase:
-                    agent.isStopped = false;
-                    PlayAnim("Run");
-                    break;
-
-                case State.RangedAttack:
-                    agent.isStopped = true;
-                    StartCoroutine(CoRangedAttack());
-                    break;
-
-                case State.Dash:
-                    StartCoroutine(CoDash());
-                    break;
-
-                case State.Dead:
-                    Die(); // ✅ 사망 처리
-                    break;
-            }
-        }
-
-        // ===== 상태별 지속 로직 =====
         switch (state)
         {
-            case State.Wander:
-                Wander();
+            case State.Idle:
+            case State.Walk:
+                if (dist <= dashRange && dashCDTimer <= 0f) GoDash();
+                else if (dist <= attackRange && attackTimer <= 0f) GoAttack();
+                else if (dist <= detectRange) GoRun();
+                else DoWander();
                 break;
 
-            case State.Chase:
-                if (player)
-                    agent.SetDestination(player.position);
+            case State.Run:
+                if (dist > loseRange) GoWander();
+                else if (dist <= dashRange && dashCDTimer <= 0f) GoDash();
+                else if (dist <= attackRange && attackTimer <= 0f) GoAttack();
+                else ChasePlayer();
                 break;
         }
     }
 
-    // ===== Wander =====
-    private void Wander()
+    // ----------------------------------------------------------
+    // FSM
+    // ----------------------------------------------------------
+    void SafeBool(string p, bool b)
     {
-        wanderTimer -= Time.deltaTime;
-        if (wanderTimer <= 0f)
+        if (animator.HasParameterOfType(p, AnimatorControllerParameterType.Bool))
+            animator.SetBool(p, b);
+    }
+
+    void SafeTrigger(string p)
+    {
+        if (animator.HasParameterOfType(p, AnimatorControllerParameterType.Trigger))
+            animator.SetTrigger(p);
+    }
+
+    void GoIdle()
+    {
+        state = State.Idle;
+        SafeBool(P_WANDER, false);
+        SafeBool(P_RUN, false);
+        if (agent && agent.enabled && agent.isOnNavMesh)
+            agent.isStopped = true;
+    }
+
+    public void GoWander()
+    {
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
+
+        state = State.Walk;
+        SafeBool(P_WANDER, true);
+        SafeBool(P_RUN, false);
+        agent.isStopped = false;
+        PickWanderPoint();
+    }
+
+    void GoRun()
+    {
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
+
+        state = State.Run;
+        SafeBool(P_WANDER, false);
+        SafeBool(P_RUN, true);
+        agent.isStopped = false;
+        ChasePlayer();
+    }
+
+    void GoAttack()
+    {
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
+
+        state = State.Attack;
+        agent.isStopped = true;
+
+        if (player)
         {
-            Vector3 randomDir = Random.insideUnitSphere * wanderRadius + transform.position;
-            NavMeshHit hit;
-            if (NavMesh.SamplePosition(randomDir, out hit, wanderRadius, 1))
-                agent.SetDestination(hit.position);
+            Vector3 dir = player.position - transform.position;
+            dir.y = 0;
+            if (dir != Vector3.zero)
+                transform.rotation = Quaternion.LookRotation(dir);
+        }
+
+        SafeTrigger(P_ATTACK);
+        StartCoroutine(CoRangedAttack());
+    }
+
+    void GoDash()
+    {
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
+
+        state = State.Dash;
+
+        agent.isStopped = true;
+        agent.enabled = false;
+
+        SafeTrigger(P_DASH);
+        StartCoroutine(CoDash());
+    }
+
+    // ----------------------------------------------------------
+    // Wander
+    // ----------------------------------------------------------
+    void PickWanderPoint()
+    {
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
+
+        Vector3 random = Random.insideUnitSphere * wanderRadius + transform.position;
+
+        if (NavMesh.SamplePosition(random, out var hit, wanderRadius, NavMesh.AllAreas))
+            agent.SetDestination(hit.position);
+    }
+
+    void DoWander()
+    {
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
+
+        wanderTimer -= Time.deltaTime;
+
+        if (wanderTimer <= 0f || Vector3.Distance(transform.position, agent.destination) < 1f)
+        {
+            PickWanderPoint();
             wanderTimer = wanderDelay;
         }
     }
 
-    // ===== Dash =====
-    private IEnumerator CoDash()
+    // ----------------------------------------------------------
+    // Chase
+    // ----------------------------------------------------------
+    void ChasePlayer()
     {
-        if (dashing || dashCDTimer > 0f) yield break;
-        dashing = true;
-        dashTimer = dashDuration;
-        dashCDTimer = dashCooldown;
+        if (!player) return;
+        if (!agent || !agent.enabled || !agent.isOnNavMesh) return;
 
-        PlayAnim("Dash");
-        Vector3 dir = (player.position - transform.position).normalized;
-        float timer = 0f;
-        agent.isStopped = true;
-
-        while (timer < dashDuration)
-        {
-            transform.position += dir * dashSpeed * Time.deltaTime;
-            timer += Time.deltaTime;
-            yield return null;
-        }
-
-        dashing = false;
-        agent.isStopped = false;
-        nextState = State.Chase;
+        NavMeshPath path = new NavMeshPath();
+        if (agent.CalculatePath(player.position, path))
+            agent.SetPath(path);
     }
 
-    // ===== Ranged Attack =====
-    private IEnumerator CoRangedAttack()
+    // ----------------------------------------------------------
+    // Attack
+    // ----------------------------------------------------------
+    IEnumerator CoRangedAttack()
     {
-        PlayAnim("Attack");
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.2f);
 
-        if (attackTimer <= 0f && projectilePrefab)
+        if (projectilePrefab && projectileSpawn)
         {
             attackTimer = attackCooldown;
-            Vector3 dir = (player.position + Vector3.up * 0.9f - projectileSpawn.position).normalized;
 
-            GameObject proj = Instantiate(projectilePrefab, projectileSpawn.position, Quaternion.LookRotation(dir));
-            Rigidbody rb = proj.GetComponent<Rigidbody>();
-            if (rb != null)
-                rb.linearVelocity = dir * projectileSpeed;
+            GameObject proj = Instantiate(
+                projectilePrefab, 
+                projectileSpawn.position, 
+                projectileSpawn.rotation
+            );
+
+            EnemyProjectile ep = proj.GetComponent<EnemyProjectile>();
+            if (ep != null)
+                ep.Fire(projectileSpawn.forward);
+
+            if (audioSource && enemyAttackClip)
+                audioSource.PlayOneShot(enemyAttackClip, 0.6f);
         }
 
-        yield return new WaitForSeconds(0.8f);
-        attackDone = true;
+        yield return new WaitForSeconds(0.4f);
+        if (!isDead) GoRun();
     }
 
-    // ===== Death =====
-    private void Die()
+    // ----------------------------------------------------------
+    // Dash
+    // ----------------------------------------------------------
+    IEnumerator CoDash()
     {
-        if (isDead) return;
-        isDead = true;
-        agent.isStopped = true;
+        dashCDTimer = dashCooldown;
+
+        if (player)
+        {
+            Vector3 dir = (player.position - transform.position).normalized;
+            float t = 0f;
+
+            while (t < dashDuration)
+            {
+                transform.position += dir * dashSpeed * Time.deltaTime;
+                t += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        // NavMesh 복귀
+        if (agent)
+        {
+            if (NavMesh.SamplePosition(transform.position, out var hit, 2f, NavMesh.AllAreas))
+            {
+                transform.position = hit.position;
+                agent.enabled = true;
+
+                if (agent.isOnNavMesh)
+                {
+                    agent.isStopped = false;
+                }
+            }
+        }
+
+        if (!isDead && agent.enabled) GoRun();
+    }
+
+    // ----------------------------------------------------------
+    // Knockback
+    // ----------------------------------------------------------
+    public void ApplyKnockback(Vector3 dir, float force)
+    {
+        StartCoroutine(CoKnockback(dir, force));
+    }
+
+    IEnumerator CoKnockback(Vector3 direction, float force)
+    {
+        // NavMeshAgent 끄기
+        if (agent)
+        {
+            if (agent.enabled && agent.isOnNavMesh)
+            {
+                agent.isStopped = true;
+                agent.enabled = false;
+            }
+        }
+
+        // Rigidbody 밀기
+        if (rb)
+        {
+            rb.isKinematic = false;
+            rb.AddForce(direction.normalized * force, ForceMode.Impulse);
+        }
+
+        yield return new WaitForSeconds(0.25f);
+
+        if (rb) rb.isKinematic = true;
+
+        // NavMeshAgent 복구
+        if (agent)
+        {
+            if (NavMesh.SamplePosition(transform.position, out var hit, 2f, NavMesh.AllAreas))
+            {
+                transform.position = hit.position;
+                agent.enabled = true;
+            }
+
+            if (agent.enabled && agent.isOnNavMesh)
+            {
+                agent.isStopped = false;
+                if (!isDead) GoRun();
+            }
+        }
+    }
+
+    // ----------------------------------------------------------
+    // Death
+    // ----------------------------------------------------------
+    void Die()
+    {
+        if (state == State.Die) return;
+
+        state = State.Die;
+
         StopAllCoroutines();
-        PlayAnim("Die");
+
+        // NavMeshAgent 안전 체크 추가
+        if (agent)
+        {
+            if (agent.enabled && agent.isOnNavMesh)
+                agent.isStopped = true;
+
+            agent.enabled = false;
+        }
+
+        SafeTrigger(P_DEAD);
+
+        GameManager.Instance.EnemyDefeated();
+
         StartCoroutine(FadeOutAndDestroy());
     }
 
-    private IEnumerator FadeOutAndDestroy()
+
+    IEnumerator FadeOutAndDestroy()
     {
+        yield return new WaitForSeconds(0.3f);
+
         Renderer rend = GetComponentInChildren<Renderer>();
-        if (rend != null)
+        if (!rend)
         {
-            Material mat = rend.material;
-            Color color;
+            Destroy(gameObject);
+            yield break;
+        }
 
-            // URP 호환
-            if (mat.HasProperty("_BaseColor"))
-                color = mat.GetColor("_BaseColor");
-            else if (mat.HasProperty("_Color"))
-                color = mat.GetColor("_Color");
-            else
-                yield break;
+        Material mat = rend.material;
+        Color c = mat.color;
 
-            // 페이드 아웃
-            for (float t = 1f; t >= 0; t -= Time.deltaTime)
-            {
-                color.a = t;
-                if (mat.HasProperty("_BaseColor"))
-                    mat.SetColor("_BaseColor", color);
-                else if (mat.HasProperty("_Color"))
-                    mat.SetColor("_Color", color);
-                yield return null;
-            }
+        for (float a = 1f; a >= 0; a -= Time.deltaTime * 2f)
+        {
+            c.a = a;
+            mat.color = c;
+            yield return null;
         }
 
         Destroy(gameObject);
     }
 
-    // ===== Utility =====
-    bool PlayerInRange(float range)
-    {
-        if (!player) return false;
-        return Vector3.Distance(transform.position, player.position) <= range;
-    }
-
-    void PlayAnim(string name)
-    {
-        if (animator)
-            animator.Play(name);
-    }
-
-    public void TakeDamage(int dmg)
-    {
-        if (isDead) return; // ✅ 이미 사망 상태 방지
-        currentHP -= dmg;
-        Debug.Log($"Enemy took {dmg} damage! Current HP: {currentHP}");
-        if (currentHP <= 0)
-            nextState = State.Dead;
-    }
-
+    // ----------------------------------------------------------
     void OnDrawGizmosSelected()
     {
         if (!showGizmos) return;
-        Gizmos.color = Color.yellow; Gizmos.DrawWireSphere(transform.position, wanderRadius);
-        Gizmos.color = Color.blue; Gizmos.DrawWireSphere(transform.position, detectRange);
-        Gizmos.color = Color.red; Gizmos.DrawWireSphere(transform.position, attackRange);
-        Gizmos.color = Color.magenta; Gizmos.DrawWireSphere(transform.position, dashRange);
-    }
 
-    private void OnCollisionEnter(Collision collision)
+        Gizmos.color = Color.cyan; Gizmos.DrawWireSphere(transform.position, detectRange);
+        Gizmos.color = Color.yellow; Gizmos.DrawWireSphere(transform.position, attackRange);
+        Gizmos.color = Color.red; Gizmos.DrawWireSphere(transform.position, dashRange);
+    }
+}
+
+// ----------------------------------------------------------
+public static class AnimatorExtensions
+{
+    public static bool HasParameterOfType(this Animator ani, string name, AnimatorControllerParameterType type)
     {
-        if (collision.gameObject.CompareTag("Player"))
-        {
-            PlayerHealth playerHealth = collision.gameObject.GetComponent<PlayerHealth>();
-            if (playerHealth != null)
-            {
-                playerHealth.TakeDamage(1);
-                Debug.Log("Player hit by Enemy!");
-            }
-        }
+        return ani.parameters.Any(p => p.name == name && p.type == type);
     }
 }

@@ -4,18 +4,22 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
+    // 1. 싱글톤 인스턴스 선언
+    public static PlayerController Instance { get; private set; }
+
     [Header("References")]
     public Transform cameraTransform; 
+    
 
     [Header("Movement Settings")]
     public float walkSpeed = 3f;       
-    public float runSpeed = 6f;        // 달리기 속도
+    public float runSpeed = 6f;        
     public float gravity = -9.81f;     
     public float jumpHeight = 1.2f;    
     public int maxJumpCount = 2;       
 
     [Header("Mouse Look Settings")]
-    public float mouseSensitivity = 120f; // 마우스 감도
+    public float mouseSensitivity = 120f; 
     public float pitchLimit = 80f;        
 
     private CharacterController controller;
@@ -27,6 +31,16 @@ public class PlayerController : MonoBehaviour
 
     private void Awake()
     {
+        // 2. 싱글톤 초기화
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this.gameObject);
+        }
+        else
+        {
+            Instance = this;
+        }
+
         controller = GetComponent<CharacterController>();
         input = new PlayerActions(); 
     }
@@ -58,16 +72,13 @@ public class PlayerController : MonoBehaviour
 
     private void HandleMovement()
     {
-        // shift + W 달리기
         bool isRunning = Keyboard.current.leftShiftKey.isPressed && moveInput.y > 0f;
         float speed = isRunning ? runSpeed : walkSpeed;
 
-        // 이동 방향 계산
         Vector3 forward = transform.forward;
         Vector3 right = transform.right;
         Vector3 move = (right * moveInput.x + forward * moveInput.y).normalized;
 
-        // 중력 및 점프 처리
         if (controller.isGrounded)
         {
             if (yVelocity < 0f)

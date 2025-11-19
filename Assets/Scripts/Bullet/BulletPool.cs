@@ -1,61 +1,43 @@
-using System.Collections.Generic;
 using UnityEngine;
+using System.Collections.Generic;
 
 public class BulletPool : MonoBehaviour
 {
-    public static BulletPool Instance; 
+    public static BulletPool Instance { get; private set; }
 
-    [Header("Bullet Prefab")]
-    public GameObject bulletPrefab;
+    [Header("Prefabs & Defaults")]
+    [SerializeField] private GameObject bulletPrefab;
+    [SerializeField] private BulletData defaultBulletData; // 반드시 할당
 
-    [Header("Pool Settings")]
-    public int poolSize = 20;
-
-    private Queue<GameObject> pool = new Queue<GameObject>();
+    private readonly Queue<GameObject> pool = new Queue<GameObject>();
 
     private void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else if (Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        InitializePool();
-    }
-
-    private void InitializePool()
-    {
-        for (int i = 0; i < poolSize; i++)
-        {
-            GameObject bullet = Instantiate(bulletPrefab);
-            bullet.SetActive(false);
-            pool.Enqueue(bullet);
-        }
+        if (Instance == null) Instance = this;
+        else { Destroy(gameObject); return; }
     }
 
     public GameObject GetFromPool()
     {
-        if (pool.Count > 0)
-        {
-            GameObject bullet = pool.Dequeue();
-            bullet.SetActive(true);
-            return bullet;
-        }
-        else
-        {
-            GameObject newBullet = Instantiate(bulletPrefab);
-            return newBullet;
-        }
+        GameObject go = pool.Count > 0 ? pool.Dequeue() : Instantiate(bulletPrefab);
+
+        // 안전 초기화
+        var bullet = go.GetComponent<Bullet>();
+        if (bullet.bulletData == null) bullet.bulletData = defaultBulletData;
+
+        go.SetActive(true);
+        return go;
     }
 
-    public void ReturnToPool(GameObject bullet)
+    public void ReturnToPool(GameObject go)
     {
-        bullet.SetActive(false);
-        pool.Enqueue(bullet);
+        if (go == null) return;
+        go.SetActive(false);
+
+        // 총알 물리/상태 리셋(필요 시)
+        var rb = go.GetComponent<Rigidbody>();
+        if (rb) { rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+
+        pool.Enqueue(go);
     }
 }

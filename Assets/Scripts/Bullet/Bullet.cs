@@ -3,7 +3,7 @@ using UnityEngine;
 public class Bullet : MonoBehaviour
 {
     [Header("ScriptableObject 데이터 참조")]
-    public BulletData bulletData; // ScriptableObject
+    public BulletData bulletData;
 
     private Rigidbody rb;
     private float lifeTimer;
@@ -15,6 +15,13 @@ public class Bullet : MonoBehaviour
 
     private void OnEnable()
     {
+        if (bulletData == null)
+        {
+            Debug.LogWarning($"{name}: BulletData was null, disabling bullet.");
+            gameObject.SetActive(false);
+            return;
+        }
+
         lifeTimer = 0f;
         if (rb != null)
             rb.linearVelocity = Vector3.zero;
@@ -22,16 +29,28 @@ public class Bullet : MonoBehaviour
 
     private void Update()
     {
+        if (bulletData == null)
+            return;
+
         lifeTimer += Time.deltaTime;
         if (lifeTimer >= bulletData.lifetime)
         {
-            BulletPool.Instance.ReturnToPool(gameObject);
+            if (BulletPool.Instance != null)
+                BulletPool.Instance.ReturnToPool(gameObject);
+            else
+                Destroy(gameObject);
         }
     }
 
     public void Fire(Vector3 direction)
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
+        if (bulletData == null)
+        {
+            Debug.LogError($"{name}: BulletData missing, cannot fire!");
+            return;
+        }
+
         rb.linearVelocity = direction * bulletData.speed;
     }
 
@@ -56,6 +75,9 @@ public class Bullet : MonoBehaviour
             }
         }
 
-        BulletPool.Instance.ReturnToPool(gameObject);
+        if (BulletPool.Instance != null)
+            BulletPool.Instance.ReturnToPool(gameObject);
+        else
+            Destroy(gameObject);
     }
 }
