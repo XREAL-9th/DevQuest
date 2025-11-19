@@ -1,21 +1,36 @@
+using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Pool;
 
 namespace XREAL
 {
     public class AttackControl : MonoBehaviour
     {
+        public AudioClip reloadClip;
+        public AudioClip fireClip;
+        public AudioClip emptyClip;
+
         [SerializeField] private GameObject bulletPrefab;
         [SerializeField] private Transform firePoint;
+        [SerializeField][Range(1f, 100f)] private float recoilForce = 100f;
+        [SerializeField][Range(1, 100)] private int maxBullet = 30;
+        public int MaxBullet => maxBullet;
 
+        private Rigidbody rb;
         private AudioSource audioSource;
-        private Camera mainCamera;
         private ObjectPool<GameObject> bulletPool;
+        private int currentBullet = 0;
+        public int CurrentBullet => currentBullet;
+
+        public event Action<int> OnBulletChanged;
 
         private void Start()
         {
-            mainCamera = Camera.main;
             TryGetComponent<AudioSource>(out audioSource);
+            TryGetComponent<Rigidbody>(out rb);
+
+            currentBullet = maxBullet;
 
             bulletPool = new ObjectPool<GameObject>(
                 createFunc: () => Instantiate(bulletPrefab),
@@ -32,37 +47,36 @@ namespace XREAL
             );
         }
 
-        private void Update()
+        public void OnReload(InputValue value)
         {
-            if (Input.GetMouseButtonDown(0))
-            {
-                FireBullet();
-            }
+            audioSource.PlayOneShot(reloadClip);
+            currentBullet = maxBullet;
+            OnBulletChanged?.Invoke(currentBullet);
         }
 
-        private void FireBullet()
+        public void FireBullet()
         {
-            audioSource.Play();
+            if (currentBullet <= 0)
+            {
+                audioSource.PlayOneShot(emptyClip);
+                return;
+            }
+
+            audioSource.PlayOneShot(fireClip);
+
+            rb.AddForce(-transform.forward * recoilForce, ForceMode.Impulse);
 
             GameObject bullet = bulletPool.Get();
             bullet.GetComponent<Bullet>().SetPool(bulletPool);
 
-            Ray centerRay = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-            Vector3 targetPoint;
-            if (Physics.Raycast(centerRay, out RaycastHit hitInfo, 1000f))
-            {
-                targetPoint = hitInfo.point;
-            }
-            else
-            {
-                targetPoint = centerRay.GetPoint(1000f);
-            }
-
-            Vector3 shootDirection = (targetPoint - firePoint.position).normalized;
+            Vector3 shootDirection = firePoint.forward;
 
             Rigidbody bulletRigidbody = bullet.GetComponent<Rigidbody>();
             bullet.transform.forward = shootDirection;
             bulletRigidbody.linearVelocity = shootDirection * 30f;
+
+            currentBullet--;
+            OnBulletChanged?.Invoke(currentBullet);
         }
     }
 }

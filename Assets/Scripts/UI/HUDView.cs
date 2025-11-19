@@ -17,18 +17,18 @@ namespace XREAL
 
         public void OnEnable()
         {
-            GameManager.singleton.playerData.OnDataChanged += HandleDataChanged;
+            Singleton.Game.playerData.OnDataChanged += HandleDataChanged;
         }
 
         private void OnDisable()
         {
-            GameManager.singleton.playerData.OnDataChanged -= HandleDataChanged;
+            Singleton.Game.playerData.OnDataChanged -= HandleDataChanged;
         }
 
         private void Initialize()
         {
-            playerHp.value = GameManager.singleton.playerData.CurrentHp / 100f;
-            playerHpText.text = GameManager.singleton.playerData.CurrentHp.ToString();
+            playerHp.value = Singleton.Game.playerData.CurrentHp / 100f;
+            playerHpText.text = Singleton.Game.playerData.CurrentHp.ToString();
         }
 
         private void HandleDataChanged(string fieldName, object newValue)
@@ -40,7 +40,7 @@ namespace XREAL
                     playerHpText.text = ((float)newValue).ToString();
                     break;
                 case "Score":
-                    scoreText.text = ((int)newValue).ToString() + " / " + GameManager.singleton.WinScore.ToString();
+                    scoreText.text = ((int)newValue).ToString() + " / " + Singleton.Game.WinScore.ToString();
                     break;
             }
         }

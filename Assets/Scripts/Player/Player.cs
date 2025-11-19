@@ -9,22 +9,22 @@ namespace XREAL
         private void Start()
         {
             SetGame();
-            GameManager.singleton.gameState = GameState.Playing;
+            Singleton.Game.gameState = GameState.Playing;
         }
 
         private void OnEnable()
         {
-            GameManager.singleton.OnGameRestart += ResetGame;
+            Singleton.Game.OnGameRestart += ResetGame;
         }
 
         private void OnDisable()
         {
-            GameManager.singleton.OnGameRestart -= ResetGame;
+            Singleton.Game.OnGameRestart -= ResetGame;
         }
 
         public void TakeDamage(float damage)
         {
-            if (GameManager.singleton.gameState != GameState.Playing)
+            if (Singleton.Game.gameState != GameState.Playing)
             {
                 return;
             }
@@ -39,7 +39,7 @@ namespace XREAL
 
         private void Die()
         {
-            GameManager.singleton.GameOver();
+            Singleton.Game.GameOver();
         }
 
         private void SetGame()

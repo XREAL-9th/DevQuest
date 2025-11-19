@@ -1,0 +1,35 @@
+{
+    "version": 1,
+    "name": "XR Input",
+    "maps": [
+        {
+            "name": "Normal",
+            "id": "0a7d8784-8b48-4a7a-a741-4d5362af56a4",
+            "actions": [
+                {
+                    "name": "Reload",
+                    "type": "Button",
+                    "id": "2f002bf9-05ce-43e3-b446-62d979180f1d",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "660b0861-dc78-404c-8948-a91d376a794d",
+                    "path": "<XRController>{RightHand}/primaryButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Reload",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

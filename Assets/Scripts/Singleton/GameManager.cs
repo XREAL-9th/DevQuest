@@ -14,7 +14,6 @@ namespace XREAL
     [DefaultExecutionOrder(-1)]
     public class GameManager : MonoBehaviour
     {
-        public static GameManager singleton;
         public PlayerDataSO playerData;
         public GameState gameState = GameState.None;
 
@@ -23,18 +22,6 @@ namespace XREAL
 
         public event Action OnGameOver;
         public event Action OnGameRestart;
-
-        private void Awake()
-        {
-            if (singleton == null)
-            {
-                singleton = this;
-            }
-            else
-            {
-                Destroy(this.gameObject);
-            }
-        }
 
         public void AddScore(int score)
         {

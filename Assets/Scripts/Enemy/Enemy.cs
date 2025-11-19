@@ -241,7 +241,7 @@ namespace XREAL
 
         private void Die()
         {
-            GameManager.singleton.AddScore(score);
+            Singleton.Game.AddScore(score);
             animator.SetTrigger("die");
             navMeshAgent.enabled = false;
             Destroy(gameObject, 1f);

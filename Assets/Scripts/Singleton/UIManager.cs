@@ -121,7 +121,7 @@ namespace XREAL
 
         public void RestartGame()
         {
-            GameManager.singleton.RestartGame();
+            Singleton.Game.RestartGame();
         }
 
         private async Awaitable UpdateFPSCounter(CancellationToken cancellationToken)
