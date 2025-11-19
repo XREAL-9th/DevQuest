@@ -1,4 +1,5 @@
 using System;
+using UnityEditor.UIElements;
 using UnityEngine;
 
 public class Health : MonoBehaviour
@@ -8,7 +9,7 @@ public class Health : MonoBehaviour
 
     private bool isDead = false;
     public event Action OnDied;
-    public event Action OnDamaged;
+    public event Action<float> OnDamaged;
     public event Action<float, float> OnHealthChanged;
 
     void Start()
@@ -27,11 +28,8 @@ public class Health : MonoBehaviour
         Debug.Log(currentHealth.ToString());
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
+        OnDamaged?.Invoke(damage);
         if (currentHealth <= 0) Die();
-        else
-        {
-            OnDamaged?.Invoke();
-        }
     }
 
     private void Die()

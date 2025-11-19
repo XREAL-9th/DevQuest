@@ -239,9 +239,9 @@ public class Enemy : MonoBehaviour
         Debug.Log("Enemy Die()");
     }
 
-    public void HandleDamaged()
+    public void HandleDamaged(float damage)
     {
-        if (state == State.Die || state == State.Stun) return;
+        if (state == State.Die) return;
         nextState = State.Stun;
     }
 
