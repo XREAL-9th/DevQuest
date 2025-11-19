@@ -14,7 +14,6 @@ public class EnemyUIManager : MonoBehaviour
         targetHealth = GetComponent<Health>();
         if (targetHealth == null || hpSlider == null)
         {
-            Debug.Log(" hp ui is null");
             enabled = false;
             return;
         }

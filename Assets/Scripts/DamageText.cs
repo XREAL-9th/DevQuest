@@ -17,7 +17,6 @@ public class DamageText : MonoBehaviour
         damageText = GetComponent<TextMeshProUGUI>();
         if (damageText == null)
         {
-            Debug.LogError("DamageTextAnimator requires a TextMeshProUGUI component.");
             enabled = false;
         }
         startColor = damageText.color;
@@ -32,7 +31,6 @@ public class DamageText : MonoBehaviour
 
     void Update()
     {
-        Debug.Log(".");
         transform.position += Vector3.up * moveSpeed * Time.deltaTime;
 
         timer -= Time.deltaTime;
