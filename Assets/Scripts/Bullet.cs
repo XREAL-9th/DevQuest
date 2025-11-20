@@ -39,7 +39,7 @@ public class Bullet : MonoBehaviour
         }
         else
         {   // 총알이 다른데 맞으면 그냥 반환
-            FindObjectOfType<ObjectPooling>().ReturnToPool(this.gameObject);
+            // FindObjectOfType<ObjectPooling>().ReturnToPool(this.gameObject);
         }
     }
 }
