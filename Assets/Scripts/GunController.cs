@@ -54,6 +54,11 @@ public class GunController : MonoBehaviour
             currentAmmunition = Mathf.Max(0, currentAmmunition - 1);
             remainAmmunition.text = currentAmmunition.ToString();
             Debug.Log("남은 탄약: " + currentAmmunition);
+
+            if(currentAmmunition == 0)
+            {
+                Destroy(this.gameObject);
+            }
             
         }
 

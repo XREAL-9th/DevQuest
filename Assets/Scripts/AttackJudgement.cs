@@ -47,7 +47,7 @@ public class AttackJudgement : MonoBehaviour
 
     }
 
-    private void OnCollisionEnter(Collision other) 
+    private void OnTriggerEnter(Collider other) 
     { 
         if(other.gameObject.CompareTag("Enemy")) 
         { 

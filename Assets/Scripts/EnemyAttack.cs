@@ -26,7 +26,7 @@ public class EnemyAttack : MonoBehaviour
         
     }
 
-    private void OnCollisionEnter(Collision other) 
+    private void OnTriggerEnter(Collider other) 
     { 
         if(this.gameObject.CompareTag("Enemy")&&other.gameObject.CompareTag("Bullet")) 
         { 

@@ -48,7 +48,7 @@ public class Enemy : MonoBehaviour
         nextState = State.Idle;
 
         nmAgent = GetComponent<NavMeshAgent>();
-        target = FindObjectOfType<MoveControl>().transform;
+        target = GameObject.FindGameObjectWithTag("Player").transform;
 
         timeSinceLastUpdate=updateInterval;
     }
